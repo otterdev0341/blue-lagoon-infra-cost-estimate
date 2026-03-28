@@ -210,7 +210,7 @@ export type NodeConfig =
   | VPCConfig | ALBConfig | CloudFrontConfig | StickyNoteConfig | CustomServiceConfig
   | BedrockConfig | EBSConfig | LightsailConfig | CognitoConfig
   | Route53Config | DynamoDBConfig | RedshiftConfig | GroupConfig
-  | TextboxConfig | CircleConfig | LineNodeConfig | APINodeConfig | FlowchartConfig;
+  | TextboxConfig | CircleConfig | ReqNoteConfig | LineNodeConfig | APINodeConfig | FlowchartConfig;
 
 export interface CanvasNode {
   id: string;

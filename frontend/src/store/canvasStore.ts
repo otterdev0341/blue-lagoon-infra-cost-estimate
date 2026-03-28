@@ -190,7 +190,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ...src,
         id: newId,
         position: { x: src.position.x + 30, y: src.position.y + 30 },
-        selected: false,
         data: JSON.parse(JSON.stringify(src.data)), // deep clone
       };
       return { nodes: [...s.nodes, copy], selectedNodeId: newId };

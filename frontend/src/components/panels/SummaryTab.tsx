@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
 import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
-import { subMonthly } from "./SubscribeTab.tsx";
+import { subMonthly, subYearlyUpfront } from "./SubscribeTab.tsx";
 import type { AdditionalCostItem } from "../../types.ts";
 
 type Period = "monthly" | "daily" | "yearly";
@@ -153,6 +154,11 @@ export function SummaryTab({ rate }: { rate: number }) {
 
   const sellingDisplay = sellingPriceUSD * f;   // used by selling price input binding
 
+  // Yearly subscriptions — full upfront amount (paid at project start)
+  const subsYearlyUpfrontUSD = subscriptions
+    .filter(s => s.billingPeriod === "yearly")
+    .reduce((sum, s) => sum + subYearlyUpfront(s), 0);
+
   const periodLabel = period === "daily" ? "day" : period === "yearly" ? "yr" : "mo";
 
   return (
@@ -270,6 +276,28 @@ export function SummaryTab({ rate }: { rate: number }) {
           </div>
         </div>
 
+        {/* Yearly subscriptions upfront */}
+        {subsYearlyUpfrontUSD > 0 && (
+          <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="text-xs font-semibold text-purple-700 flex items-center gap-1">
+                  ⚡ Yearly Subscriptions
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-200 text-purple-800">UPFRONT</span>
+                </div>
+                <div className="text-[10px] text-purple-400">Paid at project start (year 1)</div>
+              </div>
+              <div className="text-right">
+                <div className="text-base font-bold text-purple-600">{fmtTHB(subsYearlyUpfrontUSD * rate)}</div>
+                <div className="text-[10px] text-gray-400">{fmtUSD(subsYearlyUpfrontUSD)}/yr</div>
+              </div>
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-purple-100 text-[10px] text-purple-500">
+              ≈ {fmtTHB((subsYearlyUpfrontUSD / 12) * rate)}/mo equivalent after year 1
+            </div>
+          </div>
+        )}
+
         {/* ══ ONE-TIME SETUP ════════════════════════════════════════════════ */}
         {(oneTimeSetup + oneTimeAdd) > 0 && (
           <>
@@ -294,36 +322,94 @@ export function SummaryTab({ rate }: { rate: number }) {
           </>
         )}
 
-        {/* ══ GRAND TOTAL ══════════════════════════════════════════════════ */}
-        <div className="rounded-xl bg-gray-900 text-white px-4 py-3 space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Cost Summary</div>
+        {/* ══ GRAND TOTAL (collapsible) ═════════════════════════════════ */}
+        {(() => {
+          const [open, setOpen] = useState(true);
+          const totalUpfront = devDisplay + subsYearlyUpfrontUSD + (oneTimeSetup + oneTimeAdd);
+          return (
+            <div className="rounded-xl bg-gray-900 text-white overflow-hidden">
+              {/* Header — always visible, click to toggle */}
+              <button
+                className="w-full flex items-center gap-2 px-4 py-3 hover:bg-white/5 transition-colors"
+                onClick={() => setOpen(v => !v)}
+              >
+                <div className="flex-1 text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Cost Summary</div>
+                  {!open && (
+                    <div className="text-lg font-bold text-white leading-tight whitespace-nowrap mt-0.5">
+                      {fmtTHB((recurringDisplay + devDisplay + subsYearlyUpfrontUSD) * rate)}
+                    </div>
+                  )}
+                </div>
+                {open ? <ChevronUp size={14} className="text-gray-500 shrink-0" /> : <ChevronDown size={14} className="text-gray-500 shrink-0" />}
+              </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🏗 Recurring /{periodLabel}</span>
-            <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(recurringDisplay * rate)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost (project)</span>
-            <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(devDisplay * rate)}</span>
-          </div>
+              {open && (
+                <div className="px-4 pb-3 space-y-1.5 border-t border-white/10">
+                  {/* Recurring */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🏗 Recurring /{periodLabel}</span>
+                    <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(recurringDisplay * rate)}</span>
+                  </div>
+                  {period === "monthly" && (
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500 pl-4">
+                      <span className="flex-1">Daily avg</span>
+                      <span className="shrink-0">{fmtTHB((recurringUSD / 30) * rate)}</span>
+                    </div>
+                  )}
 
-          <div className="border-t border-white/10 pt-2 flex items-center gap-2">
-            <span className="text-sm text-gray-200 font-semibold flex-1">Total Cost</span>
-            <div className="text-right shrink-0">
-              <div className="text-lg font-bold text-white leading-tight whitespace-nowrap">
-                {fmtTHB((recurringDisplay + devDisplay) * rate)}
-              </div>
-              <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtUSD(recurringDisplay + devDisplay)}</div>
+                  {/* Dev cost */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost (manday)</span>
+                    <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(devDisplay * rate)}</span>
+                  </div>
+
+                  {/* Yearly subs upfront */}
+                  {subsYearlyUpfrontUSD > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">⚡ Yearly subs (upfront)</span>
+                      <span className="font-semibold text-purple-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(subsYearlyUpfrontUSD * rate)}</span>
+                    </div>
+                  )}
+
+                  {/* One-time */}
+                  {(oneTimeSetup + oneTimeAdd) > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 One-time setup</span>
+                      <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB((oneTimeSetup + oneTimeAdd) * rate)}</span>
+                    </div>
+                  )}
+
+                  {/* Total */}
+                  <div className="border-t border-white/10 pt-2 flex items-center gap-2">
+                    <span className="text-sm text-gray-200 font-semibold flex-1">Total Cost</span>
+                    <div className="text-right shrink-0">
+                      <div className="text-lg font-bold text-white leading-tight whitespace-nowrap">
+                        {fmtTHB((recurringDisplay + devDisplay + subsYearlyUpfrontUSD) * rate)}
+                      </div>
+                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtUSD(recurringDisplay + devDisplay + subsYearlyUpfrontUSD)}</div>
+                    </div>
+                  </div>
+
+                  {/* Upfront vs recurring breakdown */}
+                  {totalUpfront > 0 && (
+                    <div className="rounded-lg bg-white/5 px-2.5 py-2 space-y-1 text-[10px]">
+                      <div className="text-gray-400 font-semibold uppercase tracking-wide">Payment breakdown</div>
+                      <div className="flex justify-between text-gray-300">
+                        <span>🏗 Recurring /{periodLabel}</span>
+                        <span>{fmtTHB(recurringDisplay * rate)}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-300 font-medium">
+                        <span>⚡ Upfront at start</span>
+                        <span>{fmtTHB(totalUpfront * rate)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-
-          {period === "monthly" && (
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 pt-0.5 border-t border-white/10">
-              <span className="flex-1">Daily avg (recurring)</span>
-              <span className="shrink-0">{fmtTHB((recurringUSD / 30) * rate)}</span>
-            </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* ══ REVENUE & PROFIT ═════════════════════════════════════════════ */}
         <div className="rounded-xl border border-gray-200 overflow-hidden">
