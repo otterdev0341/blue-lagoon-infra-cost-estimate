@@ -59,6 +59,9 @@ interface CanvasState {
 
   setSellingPrice: (usd: number) => void;
 
+  exchangeRate: number;
+  setExchangeRate: (rate: number) => void;
+
   departmentRates: DepartmentRate[];
   setDepartmentRates: (rates: DepartmentRate[]) => void;
 }
@@ -75,6 +78,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   additionalCosts: [],
   subscriptions: [],
   sellingPriceUSD: 0,
+  exchangeRate: 35,
+  setExchangeRate: (exchangeRate) => set({ exchangeRate }),
   departmentRates: loadGlobalSettings().departmentRates,
 
   loadDiagram: (diagram) => {
@@ -133,7 +138,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateNodeConfig: (id, config) =>
     set((s) => ({
       nodes: s.nodes.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, config: { ...n.data.config, ...config } } } : n
+        n.id === id
+          ? { ...n, data: { ...n.data, config: { ...n.data.config, ...config } as CanvasNode["data"]["config"] } }
+          : n
       ),
     })),
 

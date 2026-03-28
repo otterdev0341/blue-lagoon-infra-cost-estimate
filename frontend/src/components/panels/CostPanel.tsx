@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
 import { fmtUSD, fmtTHB } from "../../lib/utils.ts";
@@ -44,9 +45,8 @@ function oneTimeAmount(item: AdditionalCostItem): number {
 }
 
 export function CostPanel() {
-  const { nodes, edges, billingModel, setBillingModel, additionalCosts, subscriptions } = useCanvasStore();
+  const { nodes, edges, billingModel, setBillingModel, additionalCosts, subscriptions, exchangeRate, setExchangeRate } = useCanvasStore();
   const [tab, setTab] = useState<Tab>("breakdown");
-  const [exchangeRate, setExchangeRate] = useState(35);
 
   const cost = useMemo(
     () => calculateDiagramCost(nodes, edges, billingModel),

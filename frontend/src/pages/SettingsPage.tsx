@@ -20,7 +20,7 @@ type SettingsTab = "rates" | "costs";
 
 export function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("rates");
-  const { diagramId, departmentRates, setDepartmentRates } = useCanvasStore();
+  const { diagramId, departmentRates, setDepartmentRates, exchangeRate } = useCanvasStore();
   const [saved, setSaved] = useState(false);
 
   // Local draft of rates for editing
@@ -266,7 +266,7 @@ export function SettingsPage() {
                   <p className="text-xs text-gray-400 mt-0.5">R&D, DevOps, Maintenance, and other recurring costs for the current canvas</p>
                 </div>
                 <div className="p-4">
-                  <AdditionalCostsTab />
+                  <AdditionalCostsTab rate={exchangeRate} />
                 </div>
               </div>
 
@@ -276,7 +276,7 @@ export function SettingsPage() {
                   <p className="text-xs text-gray-400 mt-0.5">Third-party tools and subscriptions for the current canvas</p>
                 </div>
                 <div className="p-4">
-                  <SubscribeTab />
+                  <SubscribeTab rate={exchangeRate} />
                 </div>
               </div>
             </div>
