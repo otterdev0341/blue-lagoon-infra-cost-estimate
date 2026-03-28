@@ -40,6 +40,7 @@ export function DashboardPage({ onOpenCanvas, onNewCanvas }: Props) {
   const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
   const [togglingTemplate, setTogglingTemplate] = useState<string | null>(null);
   const [usingTemplate, setUsingTemplate] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("recent");
@@ -71,6 +72,29 @@ export function DashboardPage({ onOpenCanvas, onNewCanvas }: Props) {
       console.error(err);
     } finally {
       setDeleting(null);
+    }
+  }
+
+  async function handleDuplicate(id: string, name: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setDuplicating(id);
+    try {
+      const source = await api.diagrams.get(id);
+      await api.diagrams.create({
+        name: `${name} (copy)`,
+        region: source.region,
+        billingModel: source.billingModel,
+        nodes: source.nodes,
+        edges: source.edges,
+        stickyNotes: source.stickyNotes,
+        departmentRates: source.departmentRates,
+        isTemplate: source.isTemplate,
+      });
+      fetchDiagrams();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDuplicating(null);
     }
   }
 
@@ -281,10 +305,22 @@ export function DashboardPage({ onOpenCanvas, onNewCanvas }: Props) {
                     >
                       <Star size={14} fill={d.isTemplate ? "currentColor" : "none"} />
                     </button>
+                    {/* Duplicate */}
+                    <button
+                      onClick={e => handleDuplicate(d.id, d.name, e)}
+                      disabled={duplicating === d.id}
+                      title="Duplicate"
+                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all p-1 rounded disabled:opacity-40"
+                    >
+                      {duplicating === d.id
+                        ? <RefreshCw size={14} className="animate-spin" />
+                        : <Copy size={14} />}
+                    </button>
                     {/* Delete */}
                     <button
                       onClick={e => handleDelete(d.id, e)}
                       disabled={deleting === d.id}
+                      title="Delete"
                       className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1 rounded"
                     >
                       <Trash2 size={14} />
