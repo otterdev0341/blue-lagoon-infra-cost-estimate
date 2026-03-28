@@ -1,0 +1,22 @@
+{
+  "name": "aws-infra-canvas-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "@hono/zod-validator": "^0.2.0",
+    "drizzle-orm": "^0.31.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.22.0",
+    "bun-types": "latest"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "aws-infra-canvas",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "backend": "cd backend && bun run dev",
+    "frontend": "cd frontend && bun run dev"
+  }
+}

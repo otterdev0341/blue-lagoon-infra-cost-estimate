@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* React Flow overrides */
+.react-flow__node {
+  cursor: grab;
+}
+.react-flow__node:active {
+  cursor: grabbing;
+}
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+/* Sticky note resize handle */
+.sticky-resize-handle {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  cursor: se-resize;
+  opacity: 0.4;
+}
+.sticky-resize-handle:hover {
+  opacity: 0.9;
+}
+
+/* Requirement note markdown preview */
+.req-note-preview p   { margin-bottom: 0.4em; }
+.req-note-preview h1  { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.3em; color: #4C1D95; }
+.req-note-preview h2  { font-size: 0.78rem; font-weight: 700; margin-bottom: 0.25em; color: #5B21B6; }
+.req-note-preview h3  { font-size: 0.72rem; font-weight: 600; margin-bottom: 0.2em; color: #6D28D9; }
+.req-note-preview ul  { padding-left: 1em; margin-bottom: 0.4em; list-style: disc; }
+.req-note-preview li  { margin-bottom: 0.15em; }
+.req-note-preview li.rn-done { color: #059669; list-style: none; margin-left: -1em; }
+.req-note-preview li.rn-todo { color: #6B7280; list-style: none; margin-left: -1em; }
+.req-note-preview code { background: #EDE9FE; color: #5B21B6; padding: 0 3px; border-radius: 3px; font-family: monospace; }
+.req-note-preview pre  { background: #1E1B4B; color: #E0E7FF; padding: 0.5em; border-radius: 4px; overflow-x: auto; margin-bottom: 0.4em; }
+.req-note-preview pre code { background: transparent; color: inherit; padding: 0; }
+.req-note-preview strong { font-weight: 600; }
+.req-note-preview em     { font-style: italic; }
+.req-note-preview hr     { border: none; border-top: 1px solid #DDD6FE; margin: 0.5em 0; }
