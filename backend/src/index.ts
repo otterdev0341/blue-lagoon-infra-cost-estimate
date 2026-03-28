@@ -42,11 +42,17 @@ async function main() {
   }
 
   const PORT = Number(process.env.PORT ?? 3001);
+
+  // Use Bun.serve() directly so the HTTP listener binds immediately
+  // (export default with a Promise does NOT start the server in Bun)
+  Bun.serve({ port: PORT, fetch: app.fetch });
+
   console.log(`\n🚀  Server  →  http://localhost:${PORT}`);
   console.log(`   DB      →  MongoDB + Mongoose`);
   console.log(`   Mode    →  ${isProd ? "production (serving static frontend)" : "development"}\n`);
-
-  return { port: PORT, fetch: app.fetch };
 }
 
-export default main();
+main().catch((err) => {
+  console.error("[startup] Fatal error:", err);
+  process.exit(1);
+});
