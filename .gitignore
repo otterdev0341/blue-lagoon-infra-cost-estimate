@@ -52,3 +52,4 @@ backend/data/*.db-wal
 
 # bun tmp
 .buntmp/
+.pids

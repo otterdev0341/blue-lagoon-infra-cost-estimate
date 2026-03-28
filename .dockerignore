@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Deps (rebuilt in Docker)
+node_modules
+**/node_modules
+frontend/node_modules
+backend/node_modules
+
+# Build artifacts
+frontend/dist
+**/dist
+
+# Local DB
+backend/data/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# Drizzle (no longer used in prod)
+backend/drizzle/
+backend/drizzle.config.ts
+
+# Env files (inject via Koyeb env vars)
+.env
+**/.env
+**/.env.local
+
+# Logs / tmp
+.logs/
+.buntmp/
+*.log
+
+# Dev scripts
+start.sh
+stop.sh
+
+# Docs / IDE
+doc/
+.claude/
+.vscode/
+.idea/

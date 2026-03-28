@@ -22,36 +22,36 @@ const DiagramBody = z.object({
 });
 
 // GET /api/diagrams
-app.get("/", (c) => {
-  const diagrams = listDiagrams();
+app.get("/", async (c) => {
+  const diagrams = await listDiagrams();
   return c.json({ data: diagrams });
 });
 
 // POST /api/diagrams
-app.post("/", zValidator("json", DiagramBody), (c) => {
+app.post("/", zValidator("json", DiagramBody), async (c) => {
   const body = c.req.valid("json");
-  const diagram = createDiagram(body as any);
+  const diagram = await createDiagram(body as any);
   return c.json({ data: diagram }, 201);
 });
 
 // GET /api/diagrams/:id
-app.get("/:id", (c) => {
-  const diagram = getDiagram(c.req.param("id"));
+app.get("/:id", async (c) => {
+  const diagram = await getDiagram(c.req.param("id"));
   if (!diagram) return c.json({ error: "Not found" }, 404);
   return c.json({ data: diagram });
 });
 
 // PUT /api/diagrams/:id
-app.put("/:id", zValidator("json", DiagramBody.partial()), (c) => {
-  const updated = updateDiagram(c.req.param("id"), c.req.valid("json") as any);
+app.put("/:id", zValidator("json", DiagramBody.partial()), async (c) => {
+  const updated = await updateDiagram(c.req.param("id"), c.req.valid("json") as any);
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ data: updated });
 });
 
-// PATCH /api/diagrams/:id/canvas  — lightweight auto-save (NO snapshot created)
+// PATCH /api/diagrams/:id/canvas  — lightweight auto-save
 app.patch("/:id/canvas", async (c) => {
   const body = await c.req.json();
-  const updated = updateDiagramCanvas(c.req.param("id"), {
+  const updated = await updateDiagramCanvas(c.req.param("id"), {
     nodes: body.nodes,
     edges: body.edges,
     stickyNotes: body.stickyNotes,
@@ -61,53 +61,53 @@ app.patch("/:id/canvas", async (c) => {
   return c.json({ data: updated });
 });
 
-// PATCH /api/diagrams/:id/template  — toggle template flag
+// PATCH /api/diagrams/:id/template
 app.patch("/:id/template", async (c) => {
   const body = await c.req.json();
-  const updated = setDiagramTemplate(c.req.param("id"), !!body.isTemplate);
+  const updated = await setDiagramTemplate(c.req.param("id"), !!body.isTemplate);
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ data: updated });
 });
 
 // DELETE /api/diagrams/:id
-app.delete("/:id", (c) => {
-  const ok = deleteDiagram(c.req.param("id"));
+app.delete("/:id", async (c) => {
+  const ok = await deleteDiagram(c.req.param("id"));
   if (!ok) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
 });
 
 // GET /api/diagrams/:id/snapshots
-app.get("/:id/snapshots", (c) => {
-  const diagram = getDiagram(c.req.param("id"));
+app.get("/:id/snapshots", async (c) => {
+  const diagram = await getDiagram(c.req.param("id"));
   if (!diagram) return c.json({ error: "Not found" }, 404);
-  return c.json({ data: getSnapshots(c.req.param("id")) });
+  return c.json({ data: await getSnapshots(c.req.param("id")) });
 });
 
-// POST /api/diagrams/:id/snapshots  — create a named checkpoint
+// POST /api/diagrams/:id/snapshots
 app.post("/:id/snapshots", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const snapshot = createNamedSnapshot(c.req.param("id"), body.label);
+  const snapshot = await createNamedSnapshot(c.req.param("id"), body.label);
   if (!snapshot) return c.json({ error: "Not found" }, 404);
   return c.json({ data: snapshot }, 201);
 });
 
-// POST /api/diagrams/:id/snapshots/:snapshotId/restore  — restore to a snapshot
-app.post("/:id/snapshots/:snapshotId/restore", (c) => {
-  const updated = restoreSnapshot(c.req.param("id"), c.req.param("snapshotId"));
+// POST /api/diagrams/:id/snapshots/:snapshotId/restore
+app.post("/:id/snapshots/:snapshotId/restore", async (c) => {
+  const updated = await restoreSnapshot(c.req.param("id"), c.req.param("snapshotId"));
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ data: updated });
 });
 
-// GET /api/diagrams/:id/cost  — on-the-fly cost calculation
-app.get("/:id/cost", (c) => {
-  const diagram = getDiagram(c.req.param("id"));
+// GET /api/diagrams/:id/cost
+app.get("/:id/cost", async (c) => {
+  const diagram = await getDiagram(c.req.param("id"));
   if (!diagram) return c.json({ error: "Not found" }, 404);
   const billing = (c.req.query("billingModel") ?? diagram.billingModel) as BillingModel;
   const cost = calculateDiagramCost(diagram.nodes, diagram.edges, billing);
   return c.json({ data: cost });
 });
 
-// POST /api/diagrams/cost/estimate  — estimate without saving
+// POST /api/diagrams/cost/estimate
 app.post("/cost/estimate", async (c) => {
   const body = await c.req.json();
   const billing = (body.billingModel ?? "ondemand") as BillingModel;

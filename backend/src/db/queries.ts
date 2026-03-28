@@ -1,275 +1,230 @@
 /**
- * All DB access lives here — one function per operation.
- *
- * TODO (MongoDB migration):
- *   Replace each function body with a Mongoose call.
- *   All function signatures stay identical so routes need zero changes.
+ * All DB access — same function signatures as the SQLite version,
+ * now backed by Mongoose + MongoDB.
  */
-import { eq, desc, and } from "drizzle-orm";
-import { db } from "./client.ts";
-import { diagrams, diagramSnapshots, pricingCache } from "./schema.ts";
 import { randomUUID } from "crypto";
+import { DiagramModel, SnapshotModel, PricingCacheModel } from "./schema.ts";
 import type { Diagram, DiagramSnapshot, PricingCacheEntry } from "../types.ts";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-function rowToDiagram(r: typeof diagrams.$inferSelect): Diagram {
+function docToDiagram(doc: any): Diagram {
   return {
-    id: r.id,
-    name: r.name,
-    description: r.description ?? undefined,
-    region: r.region,
-    billingModel: r.billingModel as Diagram["billingModel"],
-    nodes: JSON.parse(r.nodesJson),
-    edges: JSON.parse(r.edgesJson),
-    stickyNotes: JSON.parse(r.stickyNotesJson),
-    departmentRates: JSON.parse(r.departmentRatesJson ?? "[]"),
-    isTemplate: r.isTemplate === 1,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
+    id:              doc._id,
+    name:            doc.name,
+    description:     doc.description,
+    region:          doc.region,
+    billingModel:    doc.billingModel,
+    nodes:           doc.nodes ?? [],
+    edges:           doc.edges ?? [],
+    stickyNotes:     doc.stickyNotes ?? [],
+    departmentRates: doc.departmentRates ?? [],
+    isTemplate:      doc.isTemplate ?? false,
+    createdAt:       doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt:       doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   };
 }
 
-function now() {
-  return new Date().toISOString();
+function docToSnapshot(doc: any): DiagramSnapshot {
+  return {
+    id:          doc._id,
+    diagramId:   doc.diagramId,
+    label:       doc.label,
+    nodes:       doc.nodes ?? [],
+    edges:       doc.edges ?? [],
+    stickyNotes: doc.stickyNotes ?? [],
+    createdAt:   doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+  };
 }
 
-// ─── Diagrams ────────────────────────────────────────────────────────────────
+// ── Diagrams ──────────────────────────────────────────────────────────────────
 
-export function listDiagrams() {
-  return db
-    .select({
-      id:           diagrams.id,
-      name:         diagrams.name,
-      description:  diagrams.description,
-      region:       diagrams.region,
-      billingModel: diagrams.billingModel,
-      isTemplate:   diagrams.isTemplate,
-      createdAt:    diagrams.createdAt,
-      updatedAt:    diagrams.updatedAt,
-    })
-    .from(diagrams)
-    .orderBy(desc(diagrams.updatedAt))
-    .all();
+export async function listDiagrams() {
+  const docs = await DiagramModel
+    .find({}, { nodes: 0, edges: 0, stickyNotes: 0, departmentRates: 0 })
+    .sort({ updatedAt: -1 })
+    .lean();
+  return docs.map(docToDiagram);
 }
 
-export function getDiagram(id: string): Diagram | null {
-  const row = db.select().from(diagrams).where(eq(diagrams.id, id)).get();
-  return row ? rowToDiagram(row) : null;
+export async function getDiagram(id: string): Promise<Diagram | null> {
+  const doc = await DiagramModel.findById(id).lean();
+  return doc ? docToDiagram(doc) : null;
 }
 
-export function createDiagram(
+export async function createDiagram(
   data: Omit<Diagram, "id" | "createdAt" | "updatedAt">
-): Diagram {
+): Promise<Diagram> {
   const id = randomUUID();
-  const ts = now();
-  db.insert(diagrams).values({
-    id,
+  const doc = await DiagramModel.create({
+    _id:             id,
     name:            data.name,
     description:     data.description,
     region:          data.region,
     billingModel:    data.billingModel,
-    nodesJson:       JSON.stringify(data.nodes),
-    edgesJson:       JSON.stringify(data.edges),
-    stickyNotesJson: JSON.stringify(data.stickyNotes),
-    departmentRatesJson: JSON.stringify(data.departmentRates ?? []),
-    isTemplate:      data.isTemplate ? 1 : 0,
-    createdAt:       ts,
-    updatedAt:       ts,
-  }).run();
-  return getDiagram(id)!;
+    nodes:           data.nodes ?? [],
+    edges:           data.edges ?? [],
+    stickyNotes:     data.stickyNotes ?? [],
+    departmentRates: data.departmentRates ?? [],
+    isTemplate:      data.isTemplate ?? false,
+  });
+  return docToDiagram(doc);
 }
 
-export function updateDiagram(
+export async function updateDiagram(
   id: string,
   data: Partial<Omit<Diagram, "id" | "createdAt" | "updatedAt">>
-): Diagram | null {
-  const existing = getDiagram(id);
+): Promise<Diagram | null> {
+  const existing = await getDiagram(id);
   if (!existing) return null;
 
-  // Auto-snapshot before overwrite (named manual save)
-  insertSnapshot(id, existing, "Auto-checkpoint");
+  // Auto-snapshot before overwrite
+  await insertSnapshot(id, existing, "Auto-checkpoint");
 
-  db.update(diagrams)
-    .set({
-      name:            data.name            ?? existing.name,
-      description:     data.description     ?? existing.description,
-      region:          data.region          ?? existing.region,
-      billingModel:    data.billingModel     ?? existing.billingModel,
-      nodesJson:       JSON.stringify(data.nodes        ?? existing.nodes),
-      edgesJson:       JSON.stringify(data.edges        ?? existing.edges),
-      stickyNotesJson: JSON.stringify(data.stickyNotes  ?? existing.stickyNotes),
-      departmentRatesJson: JSON.stringify(data.departmentRates ?? existing.departmentRates ?? []),
-      isTemplate:      data.isTemplate !== undefined ? (data.isTemplate ? 1 : 0) : (existing.isTemplate ? 1 : 0),
-      updatedAt:       now(),
-    })
-    .where(eq(diagrams.id, id))
-    .run();
-
-  return getDiagram(id)!;
+  const doc = await DiagramModel.findByIdAndUpdate(
+    id,
+    {
+      $set: {
+        name:            data.name            ?? existing.name,
+        description:     data.description     ?? existing.description,
+        region:          data.region          ?? existing.region,
+        billingModel:    data.billingModel     ?? existing.billingModel,
+        nodes:           data.nodes           ?? existing.nodes,
+        edges:           data.edges           ?? existing.edges,
+        stickyNotes:     data.stickyNotes     ?? existing.stickyNotes,
+        departmentRates: data.departmentRates ?? existing.departmentRates,
+        isTemplate:      data.isTemplate      ?? existing.isTemplate,
+      },
+    },
+    { new: true }
+  ).lean();
+  return doc ? docToDiagram(doc) : null;
 }
 
 /** Lightweight canvas update — no snapshot (used by auto-save). */
-export function updateDiagramCanvas(
+export async function updateDiagramCanvas(
   id: string,
   data: Pick<Diagram, "nodes" | "edges" | "stickyNotes"> & { departmentRates?: Diagram["departmentRates"] }
-): Diagram | null {
-  const existing = getDiagram(id);
-  if (!existing) return null;
-
-  db.update(diagrams)
-    .set({
-      nodesJson:          JSON.stringify(data.nodes),
-      edgesJson:          JSON.stringify(data.edges),
-      stickyNotesJson:    JSON.stringify(data.stickyNotes),
-      departmentRatesJson: JSON.stringify(data.departmentRates ?? existing.departmentRates ?? []),
-      updatedAt:          now(),
-    })
-    .where(eq(diagrams.id, id))
-    .run();
-
-  return getDiagram(id)!;
-}
-
-/** Explicitly create a named snapshot checkpoint. */
-export function createNamedSnapshot(id: string, label?: string): DiagramSnapshot | null {
-  const existing = getDiagram(id);
-  if (!existing) return null;
-  const snapshotId = insertSnapshot(id, existing, label ?? "Checkpoint");
-  const row = db.select().from(diagramSnapshots).where(eq(diagramSnapshots.id, snapshotId)).get();
-  if (!row) return null;
-  return {
-    id:          row.id,
-    diagramId:   row.diagramId,
-    label:       row.label ?? undefined,
-    nodes:       JSON.parse(row.nodesJson),
-    edges:       JSON.parse(row.edgesJson),
-    stickyNotes: JSON.parse(row.stickyNotesJson),
-    createdAt:   row.createdAt,
-  };
-}
-
-/** Restore a snapshot into the live diagram (creates a "before restore" snapshot first). */
-export function restoreSnapshot(diagramId: string, snapshotId: string): Diagram | null {
-  const existing = getDiagram(diagramId);
-  if (!existing) return null;
-
-  const row = db.select().from(diagramSnapshots)
-    .where(eq(diagramSnapshots.id, snapshotId))
-    .get();
-  if (!row || row.diagramId !== diagramId) return null;
-
-  // Save current state as "Before restore" snapshot
-  insertSnapshot(diagramId, existing, "Before restore");
-
-  db.update(diagrams)
-    .set({
-      nodesJson:       row.nodesJson,
-      edgesJson:       row.edgesJson,
-      stickyNotesJson: row.stickyNotesJson,
-      updatedAt:       now(),
-    })
-    .where(eq(diagrams.id, diagramId))
-    .run();
-
-  return getDiagram(diagramId)!;
-}
-
-export function setDiagramTemplate(id: string, isTemplate: boolean): Diagram | null {
-  const existing = getDiagram(id);
-  if (!existing) return null;
-  db.update(diagrams)
-    .set({ isTemplate: isTemplate ? 1 : 0, updatedAt: now() })
-    .where(eq(diagrams.id, id))
-    .run();
-  return getDiagram(id)!;
-}
-
-export function deleteDiagram(id: string): boolean {
-  const result = db.delete(diagrams).where(eq(diagrams.id, id)).run();
-  return result.changes > 0;
-}
-
-// ─── Snapshots ───────────────────────────────────────────────────────────────
-
-export function getSnapshots(diagramId: string): DiagramSnapshot[] {
-  return db
-    .select()
-    .from(diagramSnapshots)
-    .where(eq(diagramSnapshots.diagramId, diagramId))
-    .orderBy(desc(diagramSnapshots.createdAt))
-    .limit(20)
-    .all()
-    .map((r) => ({
-      id:          r.id,
-      diagramId:   r.diagramId,
-      label:       (r as any).label ?? undefined,
-      nodes:       JSON.parse(r.nodesJson),
-      edges:       JSON.parse(r.edgesJson),
-      stickyNotes: JSON.parse(r.stickyNotesJson),
-      createdAt:   r.createdAt,
-    }));
-}
-
-function insertSnapshot(diagramId: string, d: Diagram, label?: string): string {
-  const id = randomUUID();
-  db.insert(diagramSnapshots).values({
+): Promise<Diagram | null> {
+  const doc = await DiagramModel.findByIdAndUpdate(
     id,
+    {
+      $set: {
+        nodes:           data.nodes,
+        edges:           data.edges,
+        stickyNotes:     data.stickyNotes,
+        departmentRates: data.departmentRates ?? [],
+      },
+    },
+    { new: true }
+  ).lean();
+  return doc ? docToDiagram(doc) : null;
+}
+
+export async function setDiagramTemplate(id: string, isTemplate: boolean): Promise<Diagram | null> {
+  const doc = await DiagramModel.findByIdAndUpdate(
+    id,
+    { $set: { isTemplate } },
+    { new: true }
+  ).lean();
+  return doc ? docToDiagram(doc) : null;
+}
+
+export async function deleteDiagram(id: string): Promise<boolean> {
+  const res = await DiagramModel.deleteOne({ _id: id });
+  if (res.deletedCount > 0) {
+    await SnapshotModel.deleteMany({ diagramId: id });
+    return true;
+  }
+  return false;
+}
+
+// ── Snapshots ─────────────────────────────────────────────────────────────────
+
+export async function getSnapshots(diagramId: string): Promise<DiagramSnapshot[]> {
+  const docs = await SnapshotModel
+    .find({ diagramId })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+  return docs.map(docToSnapshot);
+}
+
+export async function createNamedSnapshot(
+  id: string,
+  label?: string
+): Promise<DiagramSnapshot | null> {
+  const existing = await getDiagram(id);
+  if (!existing) return null;
+  const snapId = await insertSnapshot(id, existing, label ?? "Checkpoint");
+  const doc = await SnapshotModel.findById(snapId).lean();
+  return doc ? docToSnapshot(doc) : null;
+}
+
+export async function restoreSnapshot(
+  diagramId: string,
+  snapshotId: string
+): Promise<Diagram | null> {
+  const existing = await getDiagram(diagramId);
+  if (!existing) return null;
+
+  const snap = await SnapshotModel.findOne({ _id: snapshotId, diagramId }).lean();
+  if (!snap) return null;
+
+  await insertSnapshot(diagramId, existing, "Before restore");
+
+  const doc = await DiagramModel.findByIdAndUpdate(
     diagramId,
-    nodesJson:       JSON.stringify(d.nodes),
-    edgesJson:       JSON.stringify(d.edges),
-    stickyNotesJson: JSON.stringify(d.stickyNotes),
-    ...(label ? { label } : {}),
-  } as any).run();
-  // SQLite trigger trims to 20 automatically
+    {
+      $set: {
+        nodes:       snap.nodes,
+        edges:       snap.edges,
+        stickyNotes: snap.stickyNotes,
+      },
+    },
+    { new: true }
+  ).lean();
+  return doc ? docToDiagram(doc) : null;
+}
+
+async function insertSnapshot(diagramId: string, d: Diagram, label?: string): Promise<string> {
+  const id = randomUUID();
+  await SnapshotModel.create({
+    _id:         id,
+    diagramId,
+    label,
+    nodes:       d.nodes,
+    edges:       d.edges,
+    stickyNotes: d.stickyNotes,
+  });
+  // Trim to 20 snapshots per diagram
+  const all = await SnapshotModel.find({ diagramId }, { _id: 1 }).sort({ createdAt: -1 }).lean();
+  if (all.length > 20) {
+    const toDelete = all.slice(20).map((s: any) => s._id);
+    await SnapshotModel.deleteMany({ _id: { $in: toDelete } });
+  }
   return id;
 }
 
-// ─── Pricing Cache ───────────────────────────────────────────────────────────
+// ── Pricing Cache ─────────────────────────────────────────────────────────────
 
-export function getPricingCache(
+export async function getPricingCache(
   service: string,
   region: string
-): PricingCacheEntry | null {
-  const row = db
-    .select()
-    .from(pricingCache)
-    .where(
-      and(
-        eq(pricingCache.service, service),
-        eq(pricingCache.region,  region)
-      )
-    )
-    .get();
+): Promise<PricingCacheEntry | null> {
+  const doc = await PricingCacheModel.findOne({ service, region }).lean();
+  if (!doc) return null;
 
-  if (!row) return null;
+  const ageHours = (Date.now() - new Date(doc.fetchedAt).getTime()) / 3_600_000;
+  if (ageHours > doc.ttlHours) return null; // expired
 
-  const ageHours = (Date.now() - new Date(row.fetchedAt).getTime()) / 3_600_000;
-  if (ageHours > row.ttlHours) return null; // expired
-
-  return {
-    service:   row.service,
-    region:    row.region,
-    data:      JSON.parse(row.dataJson),
-    fetchedAt: row.fetchedAt,
-  };
+  return { service: doc.service, region: doc.region, data: doc.data, fetchedAt: doc.fetchedAt.toISOString() };
 }
 
-export function upsertPricingCache(service: string, region: string, data: unknown) {
-  db.insert(pricingCache)
-    .values({
-      id:        randomUUID(),
-      service,
-      region,
-      dataJson:  JSON.stringify(data),
-      fetchedAt: now(),
-    })
-    .onConflictDoUpdate({
-      target: [pricingCache.service, pricingCache.region],
-      set: {
-        dataJson:  JSON.stringify(data),
-        fetchedAt: now(),
-      },
-    })
-    .run();
+export async function upsertPricingCache(service: string, region: string, data: unknown) {
+  await PricingCacheModel.findOneAndUpdate(
+    { service, region },
+    { $set: { data, fetchedAt: new Date() } },
+    { upsert: true, new: true }
+  );
 }

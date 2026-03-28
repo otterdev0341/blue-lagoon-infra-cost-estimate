@@ -1,33 +1,52 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/bun";
+import { connectDB } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
 import diagramsRoute from "./routes/diagrams.ts";
 import pricingRoute from "./routes/pricing.ts";
 
-// Apply all pending Drizzle migrations before handling any requests.
-// Safe to call on every startup — already-applied migrations are skipped.
-runMigrations();
+const isProd = process.env.NODE_ENV === "production";
 
-const app = new Hono();
+async function main() {
+  // Connect to MongoDB and ensure indexes
+  await connectDB();
+  await runMigrations();
 
-app.use(
-  "/*",
-  cors({
-    origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-  })
-);
+  const app = new Hono();
 
-app.get("/health", (c) =>
-  c.json({ status: "ok", db: "sqlite+drizzle", ts: new Date().toISOString() })
-);
+  // CORS — in prod frontend is same origin (served by this server)
+  app.use(
+    "/api/*",
+    cors({
+      origin: process.env.WEB_ORIGIN ?? (isProd ? "*" : "http://localhost:5173"),
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+    })
+  );
 
-app.route("/api/diagrams", diagramsRoute);
-app.route("/api/pricing", pricingRoute);
+  // Health check
+  app.get("/health", (c) =>
+    c.json({ status: "ok", db: "mongodb+mongoose", ts: new Date().toISOString() })
+  );
 
-const PORT = Number(process.env.PORT ?? 3001);
-console.log(`\n🚀  API  →  http://localhost:${PORT}`);
-console.log(`   DB   →  SQLite + Drizzle ORM  (migrate to MongoDB for production)\n`);
+  // API routes
+  app.route("/api/diagrams", diagramsRoute);
+  app.route("/api/pricing", pricingRoute);
 
-export default { port: PORT, fetch: app.fetch };
+  // Serve built frontend static files in production
+  if (isProd) {
+    app.use("/*", serveStatic({ root: "./public" }));
+    // SPA catch-all — return index.html for any unmatched path (React Router)
+    app.get("*", serveStatic({ path: "./public/index.html" }));
+  }
+
+  const PORT = Number(process.env.PORT ?? 3001);
+  console.log(`\n🚀  Server  →  http://localhost:${PORT}`);
+  console.log(`   DB      →  MongoDB + Mongoose`);
+  console.log(`   Mode    →  ${isProd ? "production (serving static frontend)" : "development"}\n`);
+
+  return { port: PORT, fetch: app.fetch };
+}
+
+export default main();

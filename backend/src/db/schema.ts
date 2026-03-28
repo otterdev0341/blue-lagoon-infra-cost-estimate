@@ -1,65 +1,97 @@
-import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { sql } from "drizzle-orm";
+/**
+ * Mongoose models — replaces Drizzle/SQLite schema.
+ * JSON columns → native BSON objects (no serialisation).
+ */
+import { Schema, model, Document } from "mongoose";
 
-// ─── diagrams ────────────────────────────────────────────────────────────────
-// Stores the full canvas state: React Flow nodes, edges, and sticky notes
-// serialised as JSON columns.
-//
-// TODO (MongoDB migration): replace this table with a `diagrams` Mongoose model.
-// JSON columns → native BSON objects (no serialisation needed in Mongo).
-export const diagrams = sqliteTable("diagrams", {
-  id:             text("id").primaryKey(),
-  name:           text("name").notNull(),
-  description:    text("description"),
-  region:         text("region").notNull().default("us-east-1"),
-  billingModel:   text("billing_model", {
-                    enum: ["ondemand", "reserved1yr", "reserved3yr", "spot"],
-                  }).notNull().default("ondemand"),
-  nodesJson:      text("nodes_json").notNull().default("[]"),
-  edgesJson:      text("edges_json").notNull().default("[]"),
-  stickyNotesJson: text("sticky_notes_json").notNull().default("[]"),
-  departmentRatesJson: text("department_rates_json").notNull().default("[]"),
-  isTemplate:     integer("is_template").notNull().default(0),
-  createdAt:      text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt:      text("updated_at").notNull().default(sql`(datetime('now'))`),
-});
+// ── Diagrams ─────────────────────────────────────────────────────────────────
 
-// ─── diagram_snapshots ───────────────────────────────────────────────────────
-// Auto-created before each update (max 10 per diagram via SQLite trigger).
-// TODO (MongoDB migration): embed as a `snapshots[]` array inside the diagram
-// document, capped at 10 entries with $slice on push.
-export const diagramSnapshots = sqliteTable("diagram_snapshots", {
-  id:             text("id").primaryKey(),
-  diagramId:      text("diagram_id").notNull().references(() => diagrams.id, { onDelete: "cascade" }),
-  label:          text("label"),
-  nodesJson:      text("nodes_json").notNull(),
-  edgesJson:      text("edges_json").notNull(),
-  stickyNotesJson: text("sticky_notes_json").notNull(),
-  createdAt:      text("created_at").notNull().default(sql`(datetime('now'))`),
-});
+export interface IDiagram extends Document {
+  _id: string;
+  name: string;
+  description?: string;
+  region: string;
+  billingModel: "ondemand" | "reserved1yr" | "reserved3yr" | "spot";
+  nodes: unknown[];
+  edges: unknown[];
+  stickyNotes: unknown[];
+  departmentRates: unknown[];
+  isTemplate: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
-// ─── pricing_cache ───────────────────────────────────────────────────────────
-// Caches AWS price-list data per service+region with a TTL.
-// TODO (MongoDB migration): use a `pricing_cache` collection with a TTL index
-// on `fetchedAt` field (MongoDB handles expiry automatically).
-export const pricingCache = sqliteTable(
-  "pricing_cache",
+const diagramSchema = new Schema<IDiagram>(
   {
-    id:        text("id").primaryKey(),
-    service:   text("service").notNull(),
-    region:    text("region").notNull(),
-    dataJson:  text("data_json").notNull(),
-    fetchedAt: text("fetched_at").notNull().default(sql`(datetime('now'))`),
-    ttlHours:  integer("ttl_hours").notNull().default(24),
+    _id:            { type: String, required: true },
+    name:           { type: String, required: true },
+    description:    String,
+    region:         { type: String, default: "us-east-1" },
+    billingModel:   {
+      type: String,
+      enum: ["ondemand", "reserved1yr", "reserved3yr", "spot"],
+      default: "ondemand",
+    },
+    nodes:           { type: Schema.Types.Mixed, default: [] },
+    edges:           { type: Schema.Types.Mixed, default: [] },
+    stickyNotes:     { type: Schema.Types.Mixed, default: [] },
+    departmentRates: { type: Schema.Types.Mixed, default: [] },
+    isTemplate:      { type: Boolean, default: false },
   },
-  (t) => ({
-    serviceRegionIdx: uniqueIndex("pricing_cache_service_region_idx").on(t.service, t.region),
-  })
+  {
+    timestamps: true,         // auto-manages createdAt / updatedAt
+    _id: false,               // we supply our own UUID string _id
+    toJSON: { virtuals: true },
+  }
 );
 
-// ─── Inferred types ──────────────────────────────────────────────────────────
-export type DiagramRow         = typeof diagrams.$inferSelect;
-export type NewDiagramRow      = typeof diagrams.$inferInsert;
-export type SnapshotRow        = typeof diagramSnapshots.$inferSelect;
-export type NewSnapshotRow     = typeof diagramSnapshots.$inferInsert;
-export type PricingCacheRow    = typeof pricingCache.$inferSelect;
+export const DiagramModel = model<IDiagram>("Diagram", diagramSchema);
+
+// ── Snapshots ─────────────────────────────────────────────────────────────────
+// Kept as a separate collection (easier to query/cap independently).
+
+export interface ISnapshot extends Document {
+  _id: string;
+  diagramId: string;
+  label?: string;
+  nodes: unknown[];
+  edges: unknown[];
+  stickyNotes: unknown[];
+  createdAt: string;
+}
+
+const snapshotSchema = new Schema<ISnapshot>(
+  {
+    _id:        { type: String, required: true },
+    diagramId:  { type: String, required: true, index: true },
+    label:      String,
+    nodes:      { type: Schema.Types.Mixed, default: [] },
+    edges:      { type: Schema.Types.Mixed, default: [] },
+    stickyNotes:{ type: Schema.Types.Mixed, default: [] },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, _id: false }
+);
+
+export const SnapshotModel = model<ISnapshot>("DiagramSnapshot", snapshotSchema);
+
+// ── Pricing Cache ─────────────────────────────────────────────────────────────
+
+export interface IPricingCache extends Document {
+  service: string;
+  region: string;
+  data: unknown;
+  fetchedAt: Date;
+  ttlHours: number;
+}
+
+const pricingCacheSchema = new Schema<IPricingCache>({
+  service:   { type: String, required: true },
+  region:    { type: String, required: true },
+  data:      Schema.Types.Mixed,
+  fetchedAt: { type: Date, default: Date.now },
+  ttlHours:  { type: Number, default: 24 },
+});
+
+pricingCacheSchema.index({ service: 1, region: 1 }, { unique: true });
+
+export const PricingCacheModel = model<IPricingCache>("PricingCache", pricingCacheSchema);
