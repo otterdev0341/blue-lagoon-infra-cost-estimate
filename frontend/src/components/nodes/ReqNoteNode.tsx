@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { type NodeProps, NodeResizer } from "@xyflow/react";
-import { Pencil, Eye, Trash2 } from "lucide-react";
+import { Pencil, Eye, Trash2, Copy } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import type { ReqNoteConfig } from "../../types.ts";
 
@@ -55,7 +55,7 @@ interface ReqNoteData {
 export const ReqNoteNode = memo(function ReqNoteNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as ReqNoteData;
   const cfg = d.config as ReqNoteConfig;
-  const { updateNodeConfig, updateNodeMeta, deleteNode } = useCanvasStore();
+  const { updateNodeConfig, updateNodeMeta, deleteNode, duplicateNode } = useCanvasStore();
   const [isEditing, setIsEditing] = useState(true);
   const [showPalette, setShowPalette] = useState(false);
 
@@ -146,6 +146,14 @@ export const ReqNoteNode = memo(function ReqNoteNode({ id, data, selected }: Nod
           )}
         </div>
 
+        {/* Duplicate */}
+        <button
+          title="Duplicate (Ctrl+D)"
+          onClick={() => duplicateNode(id)}
+          className="w-5 h-5 flex items-center justify-center rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500 transition-colors nodrag"
+        >
+          <Copy size={10} />
+        </button>
         {/* Delete */}
         <button
           title="Delete"

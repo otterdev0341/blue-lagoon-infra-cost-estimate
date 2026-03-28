@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Trash2, Settings } from "lucide-react";
+import { Trash2, Settings, Copy } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { fmtUSD, fmtTHB } from "../../lib/utils.ts";
 import { AwsIcon } from "../AwsIcon.tsx";
@@ -34,7 +34,7 @@ interface ServiceNodeData {
 export const ServiceNode = memo(function ServiceNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as ServiceNodeData;
   const [showConfig, setShowConfig] = useState(false);
-  const { deleteNode, setSelectedNode, exchangeRate } = useCanvasStore();
+  const { deleteNode, duplicateNode, setSelectedNode, exchangeRate } = useCanvasStore();
   const color = SERVICE_COLORS[d.serviceType] ?? "#888";
 
   return (
@@ -56,6 +56,13 @@ export const ServiceNode = memo(function ServiceNode({ id, data, selected }: Nod
             onClick={(e) => { e.stopPropagation(); setShowConfig(true); }}
           >
             <Settings size={14} />
+          </button>
+          <button
+            title="Duplicate (Ctrl+D)"
+            className="opacity-40 hover:opacity-100 text-gray-500 hover:text-blue-500 transition-all"
+            onClick={(e) => { e.stopPropagation(); duplicateNode(id); }}
+          >
+            <Copy size={13} />
           </button>
           <button
             className="opacity-40 hover:opacity-100 text-red-500 transition-opacity"

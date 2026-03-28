@@ -30,7 +30,7 @@ interface APINodeData {
 export const APINode = memo(function APINode({ id, data, selected }: NodeProps) {
   const d = data as unknown as APINodeData;
   const cfg = d.config as APINodeConfig;
-  const { updateNodeConfig, deleteNode, departmentRates } = useCanvasStore();
+  const { updateNodeConfig, deleteNode, duplicateNode, departmentRates } = useCanvasStore();
   const [editing, setEditing] = useState(false);
 
   const color = PROTOCOL_COLORS[cfg.protocol] ?? "#0EA5E9";
@@ -50,6 +50,11 @@ export const APINode = memo(function APINode({ id, data, selected }: NodeProps) 
           style={{ background: color }}
         >{badge}</span>
         <span className="text-xs font-semibold truncate text-gray-700 flex-1">{d.label}</span>
+        <button
+          title="Duplicate (Ctrl+D)"
+          className="text-gray-400 hover:text-blue-500 transition-colors nodrag text-xs"
+          onClick={() => duplicateNode(id)}
+        >⧉</button>
         <button
           className="text-gray-400 hover:text-red-500 transition-colors nodrag text-xs"
           onClick={() => deleteNode(id)}

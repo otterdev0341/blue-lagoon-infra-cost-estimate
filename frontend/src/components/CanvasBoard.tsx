@@ -74,6 +74,7 @@ function CanvasInner() {
     nodes, edges, stickyNotes, billingModel, defaultRegion, departmentRates,
     onNodesChange, onEdgesChange, onConnect,
     addServiceNode, addStickyNote, updateStickyNote, reparentNode,
+    selectedNodeId, duplicateNode,
   } = useCanvasStore();
 
   const { screenToFlowPosition } = useReactFlow();
@@ -111,6 +112,20 @@ function CanvasInner() {
       });
     });
   }, [stickyNotes]);
+
+  // Ctrl/Cmd+D → duplicate selected node
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        if (selectedNodeId) {
+          e.preventDefault();
+          duplicateNode(selectedNodeId);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedNodeId, duplicateNode]);
 
   const cost = useMemo(
     () => calculateDiagramCost(nodes, edges, billingModel, departmentRates),

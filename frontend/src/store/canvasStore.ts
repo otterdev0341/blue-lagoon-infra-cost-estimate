@@ -38,6 +38,7 @@ interface CanvasState {
   updateNodeRegion: (id: string, region: string, az?: string) => void;
   updateNodeStyle: (id: string, style: { width?: number; height?: number }) => void;
   reparentNode: (id: string, parentId: string | undefined, position: { x: number; y: number }) => void;
+  duplicateNode: (id: string) => void;
   deleteNode: (id: string) => void;
   setSelectedNode: (id: string | null) => void;
   mergeNodes: (nodes: CanvasNode[], edges: CanvasEdge[], stickyNotes: StickyNote[]) => void;
@@ -179,6 +180,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : n
       ),
     })),
+
+  duplicateNode: (id) =>
+    set((s) => {
+      const src = s.nodes.find((n) => n.id === id);
+      if (!src) return {};
+      const newId = randomId();
+      const copy: CanvasNode = {
+        ...src,
+        id: newId,
+        position: { x: src.position.x + 30, y: src.position.y + 30 },
+        selected: false,
+        data: JSON.parse(JSON.stringify(src.data)), // deep clone
+      };
+      return { nodes: [...s.nodes, copy], selectedNodeId: newId };
+    }),
 
   deleteNode: (id) =>
     set((s) => ({

@@ -40,7 +40,7 @@ interface LineNodeData {
 export const LineNode = memo(function LineNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as LineNodeData;
   const cfg = d.config as LineNodeConfig;
-  const { updateNodeConfig, deleteNode, departmentRates } = useCanvasStore();
+  const { updateNodeConfig, deleteNode, duplicateNode, departmentRates } = useCanvasStore();
   const [editing, setEditing] = useState(false);
 
   const color = SUBTYPE_COLORS[cfg.subtype] ?? "#6B7280";
@@ -58,7 +58,12 @@ export const LineNode = memo(function LineNode({ id, data, selected }: NodeProps
         <span className="text-base">{icon}</span>
         <span className="text-xs font-bold truncate" style={{ color }}>{d.label}</span>
         <button
-          className="ml-auto text-gray-400 hover:text-red-500 transition-colors nodrag text-xs"
+          title="Duplicate (Ctrl+D)"
+          className="ml-auto text-gray-400 hover:text-blue-500 transition-colors nodrag text-xs"
+          onClick={() => duplicateNode(id)}
+        >⧉</button>
+        <button
+          className="text-gray-400 hover:text-red-500 transition-colors nodrag text-xs"
           onClick={() => deleteNode(id)}
         >✕</button>
       </div>
