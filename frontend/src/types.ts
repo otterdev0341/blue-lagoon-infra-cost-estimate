@@ -154,6 +154,7 @@ export interface TextboxConfig {
 export interface ReqNoteConfig {
   content: string;
   bgColor: string;
+  fontSize?: number;   // px — default 12
 }
 
 export interface CircleConfig {

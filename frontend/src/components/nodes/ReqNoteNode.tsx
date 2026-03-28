@@ -60,6 +60,8 @@ export const ReqNoteNode = memo(function ReqNoteNode({ id, data, selected }: Nod
   const [showPalette, setShowPalette] = useState(false);
 
   const accentColor = "#7C3AED";
+  const fontSize = cfg.fontSize ?? 12;
+  const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24];
 
   return (
     <div
@@ -101,6 +103,19 @@ export const ReqNoteNode = memo(function ReqNoteNode({ id, data, selected }: Nod
         >
           {isEditing ? <Eye size={11} /> : <Pencil size={11} />}
         </button>
+
+        {/* Font size picker */}
+        <select
+          title="Font size"
+          className="nodrag nopan text-[10px] font-medium bg-transparent border border-gray-300 rounded px-0.5 py-0 outline-none cursor-pointer hover:border-purple-400 transition-colors"
+          style={{ color: accentColor, maxWidth: 42 }}
+          value={fontSize}
+          onChange={e => updateNodeConfig(id, { ...cfg, fontSize: Number(e.target.value) })}
+        >
+          {FONT_SIZES.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
 
         {/* Color picker */}
         <div className="relative nodrag">
@@ -144,14 +159,16 @@ export const ReqNoteNode = memo(function ReqNoteNode({ id, data, selected }: Nod
       {/* Body */}
       {isEditing ? (
         <textarea
-          className="flex-1 w-full px-3 py-2 bg-transparent resize-none outline-none text-xs text-gray-700 placeholder:text-gray-400 nodrag nopan leading-relaxed"
+          className="flex-1 w-full px-3 py-2 bg-transparent resize-none outline-none text-gray-700 placeholder:text-gray-400 nodrag nopan leading-relaxed"
+          style={{ fontSize }}
           placeholder={"# Title\n\nWrite requirements, user stories, or notes in **markdown**.\n\n- [ ] Acceptance criterion 1\n- [ ] Acceptance criterion 2"}
           value={cfg.content}
           onChange={e => updateNodeConfig(id, { ...cfg, content: e.target.value })}
         />
       ) : (
         <div
-          className="flex-1 px-3 py-2 overflow-auto text-xs text-gray-700 nodrag nopan req-note-preview"
+          className="flex-1 px-3 py-2 overflow-auto text-gray-700 nodrag nopan req-note-preview"
+          style={{ fontSize }}
           dangerouslySetInnerHTML={{ __html: `<p>${renderMd(cfg.content || "_empty_")}</p>` }}
         />
       )}
