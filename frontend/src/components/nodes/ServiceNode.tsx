@@ -34,7 +34,7 @@ interface ServiceNodeData {
 export const ServiceNode = memo(function ServiceNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as ServiceNodeData;
   const [showConfig, setShowConfig] = useState(false);
-  const { deleteNode, setSelectedNode } = useCanvasStore();
+  const { deleteNode, setSelectedNode, exchangeRate } = useCanvasStore();
   const color = SERVICE_COLORS[d.serviceType] ?? "#888";
 
   return (
@@ -85,13 +85,13 @@ export const ServiceNode = memo(function ServiceNode({ id, data, selected }: Nod
           {d.monthlyCost !== undefined && (
             <div className="mt-1 pt-1 border-t border-gray-100">
               <div className="font-semibold text-gray-900">
-                {fmtTHB(d.monthlyCost * 35)}
+                {fmtUSD(d.monthlyCost)}
                 <span className="text-gray-400 font-normal text-xs">/mo</span>
               </div>
-              <div className="text-[10px] text-gray-400">{fmtUSD(d.monthlyCost)}</div>
+              <div className="text-[10px] text-gray-400">{fmtTHB(d.monthlyCost * exchangeRate)}</div>
               {d.monthlyMin !== undefined && d.monthlyMax !== undefined && (
                 <div className="text-[10px] text-gray-400">
-                  {fmtTHB(d.monthlyMin * 35)} – {fmtTHB(d.monthlyMax * 35)} (ASG)
+                  {fmtUSD(d.monthlyMin)} – {fmtUSD(d.monthlyMax)} (ASG)
                 </div>
               )}
             </div>

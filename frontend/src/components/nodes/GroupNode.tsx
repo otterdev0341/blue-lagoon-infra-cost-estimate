@@ -54,7 +54,7 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
   const cfg = d.config ?? { groupType: "infrastructure" as GroupType };
   const groupType: GroupType = cfg.groupType ?? "infrastructure";
   const style = GROUP_STYLES[groupType];
-  const { deleteNode, updateNodeMeta, updateNodeStyle, updateNodeConfig } = useCanvasStore();
+  const { deleteNode, updateNodeMeta, updateNodeStyle, updateNodeConfig, exchangeRate } = useCanvasStore();
 
   const [editing, setEditing] = useState(false);
   const [labelDraft, setLabelDraft] = useState(d.label);
@@ -208,11 +208,11 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
           style={{ pointerEvents: "none" }}
         >
           <div className="text-xs font-semibold" style={{ color: style.border }}>
-            {fmtTHB(d.childrenCost * DEFAULT_RATE)}
+            {fmtUSD(d.childrenCost)}
             <span className="text-[10px] font-normal opacity-60">/mo</span>
           </div>
           <div className="text-[10px] opacity-50" style={{ color: style.border }}>
-            {fmtUSD(d.childrenCost)}
+            {fmtTHB(d.childrenCost * exchangeRate)}
           </div>
         </div>
       )}
@@ -223,7 +223,7 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
           className="absolute bottom-2 left-3 text-[10px] px-2 py-0.5 rounded-full font-medium"
           style={{ background: style.border + "20", color: style.border, pointerEvents: "none" }}
         >
-          Setup: {fmtTHB(setupUSD * DEFAULT_RATE)}
+          Setup: {fmtUSD(setupUSD)}
         </div>
       )}
 
