@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, Maximize2, X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
 import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
-import { subMonthly } from "./SubscribeTab.tsx";
+import { subMonthly, subYearlyUpfront } from "./SubscribeTab.tsx";
 import type { AdditionalCostItem, GroupBillingType } from "../../types.ts";
 
 type Currency = "thb" | "usd";
@@ -40,6 +40,7 @@ const API_LINE_TYPES = new Set([
 
 // ── Collapsible row ──────────────────────────────────────────────────────────
 
+interface RowItem { label: string; sublabel?: string; amount: string }
 interface RowProps {
   icon: string;
   title: string;
@@ -48,7 +49,7 @@ interface RowProps {
   secondary?: string;
   color: string;
   badge?: string;
-  items?: { label: string; amount: string }[];
+  items?: RowItem[];
 }
 function Row({ icon, title, subtitle, primary, secondary, color, badge, items }: RowProps) {
   const [open, setOpen] = useState(false);
@@ -83,11 +84,16 @@ function Row({ icon, title, subtitle, primary, secondary, color, badge, items }:
         )}
       </button>
       {open && canExpand && (
-        <div className="border-t px-3 py-2 space-y-1 bg-white" style={{ borderColor: color + "25" }}>
+        <div className="border-t px-3 py-2 space-y-1.5 bg-white" style={{ borderColor: color + "25" }}>
           {items!.map((it, i) => (
-            <div key={i} className="flex justify-between text-xs text-gray-600">
-              <span className="truncate flex-1">{it.label}</span>
-              <span className="font-medium ml-2" style={{ color }}>{it.amount}</span>
+            <div key={i} className="flex justify-between gap-2 text-xs text-gray-600">
+              <div className="flex-1 min-w-0">
+                <div className="truncate font-medium">{it.label}</div>
+                {it.sublabel && (
+                  <div className="text-[10px] text-gray-400 truncate">{it.sublabel}</div>
+                )}
+              </div>
+              <span className="font-semibold shrink-0" style={{ color }}>{it.amount}</span>
             </div>
           ))}
         </div>
@@ -397,25 +403,29 @@ function ThreeYearTable({
 // ── Left cost column (fullscreen) ─────────────────────────────────────────────
 
 interface CostColumnProps {
-  groupBreakdowns: { id: string; label: string; billingType: GroupBillingType; total: number; services: any[] }[];
-  ungroupedNodes:  any[];
-  ungroupedUSD:    number;
-  devUSD:          number;
-  additionalCosts: AdditionalCostItem[];
-  subscriptions:   any[];
-  monthlyAnnual:   number;
-  yearlyPayment:   number;
-  onetimePayment:  number;
-  addUSD:          number;
-  subsUSD:         number;
+  groupBreakdowns:  { id: string; label: string; billingType: GroupBillingType; total: number; services: any[] }[];
+  ungroupedNodes:   any[];
+  ungroupedUSD:     number;
+  devUSD:           number;
+  additionalCosts:  AdditionalCostItem[];
+  monthlySubsList:  any[];
+  yearlySubsList:   any[];
+  monthlySubsUSD:   number;
+  yearlySubsUSD:    number;
+  monthlyAnnual:    number;
+  yearlyPayment:    number;
+  onetimePayment:   number;
+  addUSD:           number;
+  nodes:            any[];
   fmt:    (usd: number) => string;
   fmtAlt: (usd: number) => string;
 }
 function CostColumn({
   groupBreakdowns, ungroupedNodes, ungroupedUSD, devUSD,
-  additionalCosts, subscriptions,
+  additionalCosts,
+  monthlySubsList, yearlySubsList, monthlySubsUSD, yearlySubsUSD,
   monthlyAnnual, yearlyPayment, onetimePayment,
-  addUSD, subsUSD,
+  addUSD, nodes,
   fmt, fmtAlt,
 }: CostColumnProps) {
   return (
@@ -434,7 +444,11 @@ function CostColumn({
           <Row key={g.id} icon="📦" title={g.label} color={bColor} badge={bLabel}
             subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
             primary={fmt(displayAmt) + suffix} secondary={fmtAlt(displayAmt) + suffix}
-            items={g.services.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
+            items={g.services.map((n: any) => {
+              const nd = nodes.find((x: any) => x.id === n.nodeId);
+              const desc = (nd?.data?.config as any)?.description;
+              return { label: n.label, sublabel: desc || undefined, amount: fmt(n.monthly) + "/mo" };
+            })}
           />
         );
       })}
@@ -444,7 +458,11 @@ function CostColumn({
         <Row icon="🔧" title="Ungrouped" color="#94A3B8"
           subtitle={`${ungroupedNodes.length} service${ungroupedNodes.length !== 1 ? "s" : ""}`}
           primary={fmt(ungroupedUSD) + "/mo"} secondary={fmtAlt(ungroupedUSD) + "/mo"}
-          items={ungroupedNodes.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
+          items={ungroupedNodes.map((n: any) => {
+            const nd = nodes.find((x: any) => x.id === n.nodeId);
+            const desc = (nd?.data?.config as any)?.description;
+            return { label: n.label, sublabel: desc || undefined, amount: fmt(n.monthly) + "/mo" };
+          })}
         />
       )}
 
@@ -459,14 +477,26 @@ function CostColumn({
         />
       )}
 
-      {/* Subscriptions */}
-      {subscriptions.length > 0 && (
-        <Row icon="🔄" title="Subscriptions" color="#6366F1"
-          subtitle={subscriptions.map((s: any) => s.service).join(", ")}
-          primary={fmt(subsUSD) + "/mo"} secondary={fmtAlt(subsUSD) + "/mo"}
-          items={subscriptions.map((s: any) => ({
+      {/* Monthly subscriptions */}
+      {monthlySubsList.length > 0 && (
+        <Row icon="🔄" title="Subscriptions" color="#6366F1" badge="monthly"
+          subtitle={monthlySubsList.map((s: any) => s.service).join(", ")}
+          primary={fmt(monthlySubsUSD) + "/mo"} secondary={fmtAlt(monthlySubsUSD) + "/mo"}
+          items={monthlySubsList.map((s: any) => ({
             label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
             amount: fmt(subMonthly(s)) + "/mo",
+          }))}
+        />
+      )}
+
+      {/* Yearly subscriptions */}
+      {yearlySubsList.length > 0 && (
+        <Row icon="🔄" title="Subscriptions" color="#8B5CF6" badge="yearly"
+          subtitle={yearlySubsList.map((s: any) => s.service).join(", ")}
+          primary={fmt(yearlySubsUSD) + "/yr"} secondary={fmtAlt(yearlySubsUSD) + "/yr"}
+          items={yearlySubsList.map((s: any) => ({
+            label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
+            amount: fmt(subYearlyUpfront(s)) + "/yr",
           }))}
         />
       )}
@@ -558,24 +588,38 @@ export function SummaryTab({ rate }: { rate: number }) {
 
   // ── Cost buckets ───────────────────────────────────────────────────────────
   const addUSD         = additionalCosts.reduce((s, c) => s + recurringMonthly(c), 0);
-  const subsUSD        = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
   const oneTimeAdd     = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
   const oneTimeSetup   = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
 
-  // Monthly recurring (monthly groups + ungrouped + additional + subs)
+  // Split subscriptions: monthly subs → recurring; yearly subs → yearly bucket
+  const monthlySubsUSD = subscriptions
+    .filter(s => s.billingPeriod === "monthly")
+    .reduce((sum, s) => sum + subMonthly(s), 0);
+  const yearlySubsUSD  = subscriptions
+    .filter(s => s.billingPeriod === "yearly")
+    .reduce((sum, s) => sum + subYearlyUpfront(s), 0);
+
+  // Monthly recurring (monthly groups + ungrouped + additional + monthly subs only)
   const recurringUSD =
     monthlyGroups.reduce((s, g) => s + g.total, 0) +
-    ungroupedUSD + cost.dataTransfer.monthly + addUSD + subsUSD;
+    ungroupedUSD + cost.dataTransfer.monthly + addUSD + monthlySubsUSD;
 
   // Year 1 payment buckets
   const monthlyAnnual  = recurringUSD * 12;
-  const yearlyPayment  = yearlyGroups.reduce((s, g) => s + g.total * 12, 0);
+  // Yearly: yearly groups + yearly subscriptions (paid once per year)
+  const yearlyPayment  = yearlyGroups.reduce((s, g) => s + g.total * 12, 0) + yearlySubsUSD;
   const onetimePayment =
     onetimeGroups.reduce((s, g) => s + g.total, 0) +
     devUSD + oneTimeAdd + oneTimeSetup;
 
   const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
   const year2PlusCost = monthlyAnnual + yearlyPayment;
+
+  // Revenue per year (Year 2+ falls back to Year 1 price if MA not set)
+  const y2Rev = (year2SellingPriceUSD > 0 ? year2SellingPriceUSD : sellingPriceUSD) * 12;
+
+  const monthlySubsList = subscriptions.filter(s => s.billingPeriod === "monthly");
+  const yearlySubsList  = subscriptions.filter(s => s.billingPeriod === "yearly");
 
   const isEmpty = groupBreakdowns.length === 0 && ungroupedNodes.length === 0 &&
     additionalCosts.length === 0 && subscriptions.length === 0 && devUSD === 0;
@@ -616,12 +660,15 @@ export function SummaryTab({ rate }: { rate: number }) {
               ungroupedUSD={ungroupedUSD}
               devUSD={devUSD}
               additionalCosts={additionalCosts}
-              subscriptions={subscriptions}
+              monthlySubsList={monthlySubsList}
+              yearlySubsList={yearlySubsList}
+              monthlySubsUSD={monthlySubsUSD}
+              yearlySubsUSD={yearlySubsUSD}
               monthlyAnnual={monthlyAnnual}
               yearlyPayment={yearlyPayment}
               onetimePayment={onetimePayment}
               addUSD={addUSD}
-              subsUSD={subsUSD}
+              nodes={nodes}
               fmt={fmt}
               fmtAlt={fmtAlt}
             />
@@ -697,7 +744,11 @@ export function SummaryTab({ rate }: { rate: number }) {
             <Row key={g.id} icon="📦" title={g.label} color={bColor} badge={bLabel}
               subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
               primary={fmt(displayAmt) + suffix} secondary={fmtAlt(displayAmt) + suffix}
-              items={g.services.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
+              items={g.services.map((n: any) => {
+                const nd = nodes.find(x => x.id === n.nodeId);
+                const desc = (nd?.data?.config as any)?.description;
+                return { label: n.label, sublabel: desc || undefined, amount: fmt(n.monthly) + "/mo" };
+              })}
             />
           );
         })}
@@ -707,7 +758,11 @@ export function SummaryTab({ rate }: { rate: number }) {
           <Row icon="🔧" title="Ungrouped" color="#94A3B8"
             subtitle={`${ungroupedNodes.length} service${ungroupedNodes.length !== 1 ? "s" : ""}`}
             primary={fmt(ungroupedUSD) + "/mo"} secondary={fmtAlt(ungroupedUSD) + "/mo"}
-            items={ungroupedNodes.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
+            items={ungroupedNodes.map((n: any) => {
+              const nd = nodes.find(x => x.id === n.nodeId);
+              const desc = (nd?.data?.config as any)?.description;
+              return { label: n.label, sublabel: desc || undefined, amount: fmt(n.monthly) + "/mo" };
+            })}
           />
         )}
 
@@ -722,14 +777,26 @@ export function SummaryTab({ rate }: { rate: number }) {
           />
         )}
 
-        {/* Subscriptions */}
-        {subscriptions.length > 0 && (
-          <Row icon="🔄" title="Subscriptions" color="#6366F1"
-            subtitle={subscriptions.map((s: any) => s.service).join(", ")}
-            primary={fmt(subsUSD) + "/mo"} secondary={fmtAlt(subsUSD) + "/mo"}
-            items={subscriptions.map((s: any) => ({
+        {/* Monthly subscriptions */}
+        {monthlySubsList.length > 0 && (
+          <Row icon="🔄" title="Subscriptions" color="#6366F1" badge="monthly"
+            subtitle={monthlySubsList.map(s => s.service).join(", ")}
+            primary={fmt(monthlySubsUSD) + "/mo"} secondary={fmtAlt(monthlySubsUSD) + "/mo"}
+            items={monthlySubsList.map(s => ({
               label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
               amount: fmt(subMonthly(s)) + "/mo",
+            }))}
+          />
+        )}
+
+        {/* Yearly subscriptions — paid once per year */}
+        {yearlySubsList.length > 0 && (
+          <Row icon="🔄" title="Subscriptions" color="#8B5CF6" badge="yearly"
+            subtitle={yearlySubsList.map(s => s.service).join(", ")}
+            primary={fmt(yearlySubsUSD) + "/yr"} secondary={fmtAlt(yearlySubsUSD) + "/yr"}
+            items={yearlySubsList.map(s => ({
+              label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
+              amount: fmt(subYearlyUpfront(s)) + "/yr",
             }))}
           />
         )}
@@ -785,11 +852,11 @@ export function SummaryTab({ rate }: { rate: number }) {
                     <span className="text-xs font-semibold text-blue-300 shrink-0">{fmt(g.total)}/mo</span>
                   </div>
                 ))}
-                {(ungroupedUSD > 0 || addUSD > 0 || subsUSD > 0) && (
+                {(ungroupedUSD > 0 || addUSD > 0 || monthlySubsUSD > 0) && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 text-xs flex-1 truncate">Other recurring</span>
                     <span className="text-xs font-semibold text-blue-300 shrink-0">
-                      {fmt(ungroupedUSD + addUSD + subsUSD + cost.dataTransfer.monthly)}/mo
+                      {fmt(ungroupedUSD + addUSD + monthlySubsUSD + cost.dataTransfer.monthly)}/mo
                     </span>
                   </div>
                 )}
@@ -799,14 +866,21 @@ export function SummaryTab({ rate }: { rate: number }) {
                     <span className="text-sm font-bold text-orange-300">{fmt(recurringUSD)}</span>
                   </div>
                 )}
-                {/* Yearly groups */}
-                {yearlyGroups.length > 0 && (
+                {/* Yearly groups + yearly subs */}
+                {(yearlyGroups.length > 0 || yearlySubsList.length > 0) && (
                   <div className="border-t border-white/10 pt-1">
                     {yearlyGroups.map(g => (
                       <div key={g.id} className="flex items-center gap-2 mb-1">
                         <span className="text-gray-400 text-xs flex-1 truncate">📦 {g.label}</span>
                         <span className="text-[9px] text-indigo-400 shrink-0">yearly</span>
                         <span className="text-xs font-semibold text-indigo-300 shrink-0">{fmt(g.total * 12)}/yr</span>
+                      </div>
+                    ))}
+                    {yearlySubsList.map(s => (
+                      <div key={s.id} className="flex items-center gap-2 mb-1">
+                        <span className="text-gray-400 text-xs flex-1 truncate">🔄 {s.service}</span>
+                        <span className="text-[9px] text-violet-400 shrink-0">sub/yr</span>
+                        <span className="text-xs font-semibold text-violet-300 shrink-0">{fmt(subYearlyUpfront(s))}/yr</span>
                       </div>
                     ))}
                     <div className="flex items-center gap-2">
@@ -897,7 +971,7 @@ export function SummaryTab({ rate }: { rate: number }) {
                 />
                 <span className="text-xs text-gray-400">/yr</span>
               </div>
-              <div className="text-[10px] text-gray-400">Charged to client from Year 2 onwards (MA, support, etc.)</div>
+              <div className="text-[10px] text-gray-400">Revenue from client from Year 2 (MA, support, etc.)</div>
             </label>
 
             {sellingPriceUSD > 0 && (
@@ -910,7 +984,7 @@ export function SummaryTab({ rate }: { rate: number }) {
                   },
                   {
                     label: "📈 Year 2+", cost: year2PlusCost,
-                    revenue: (year2SellingPriceUSD > 0 ? year2SellingPriceUSD : sellingPriceUSD) * 12,
+                    revenue: y2Rev,
                     hint: "MA + recurring", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
                   },
                 ].map((yr, i) => {
