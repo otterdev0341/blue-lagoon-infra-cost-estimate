@@ -80,7 +80,8 @@ export function CostPanel() {
 
   // ── Cost totals ─────────────────────────────────────────────────────────
   const totalInfra        = cost.perNode.filter(n => n.serviceType !== "custom" && !API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0) + cost.dataTransfer.monthly;
-  const totalApiLine      = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0);
+  // Only ungrouped dev nodes shown separately; grouped dev nodes are inside their group total
+  const totalApiLine      = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType) && !nodes.find(x => x.id === n.nodeId)?.parentId).reduce((s, n) => s + n.monthly, 0);
   // Only monthly-billed custom nodes contribute to recurring; subscribe/rounding are amortised by cost engine
   const totalExternal     = cost.perNode.filter(n => n.serviceType === "custom").reduce((s, n) => s + n.monthly, 0);
   const totalAddRecurring = additionalCosts.reduce((s, c) => s + monthlyRecurring(c), 0);

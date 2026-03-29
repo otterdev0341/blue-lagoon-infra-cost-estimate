@@ -286,9 +286,13 @@ export function SummaryTab({ rate }: { rate: number }) {
   const fmt    = (usd: number) => currency === "thb" ? fmtTHB(usd * rate) : fmtUSD(usd);
   const fmtAlt = (usd: number) => currency === "thb" ? fmtUSD(usd) : fmtTHB(usd * rate);
 
-  // ── Dev nodes ─────────────────────────────────────────────────────────────
-  const devNodes = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType));
-  const devUSD   = devNodes.reduce((s, n) => s + n.monthly, 0);
+  // ── Dev nodes — only ungrouped ones (grouped dev nodes are in their group total) ──
+  const devNodes = cost.perNode.filter(n => {
+    if (!API_LINE_TYPES.has(n.serviceType)) return false;
+    const nd = nodes.find(x => x.id === n.nodeId);
+    return !nd?.parentId; // skip if already inside a group
+  });
+  const devUSD = devNodes.reduce((s, n) => s + n.monthly, 0);
 
   // ── Groups ────────────────────────────────────────────────────────────────
   const groupBreakdowns = useMemo(() => {
