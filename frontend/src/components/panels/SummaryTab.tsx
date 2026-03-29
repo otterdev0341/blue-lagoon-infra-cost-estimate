@@ -1,15 +1,12 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
 import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
 import { subMonthly } from "./SubscribeTab.tsx";
 import type { AdditionalCostItem, GroupBillingType } from "../../types.ts";
 
-type Period   = "monthly" | "yearly";
 type Currency = "thb" | "usd";
-
-function periodFactor(p: Period): number { return p === "yearly" ? 12 : 1; }
 
 function recurringMonthly(item: AdditionalCostItem): number {
   if (item.billingPeriod === "one-time") return 0;
@@ -51,7 +48,6 @@ interface RowProps {
   badge?: string;
   items?: { label: string; amount: string }[];
 }
-
 function Row({ icon, title, subtitle, primary, secondary, color, badge, items }: RowProps) {
   const [open, setOpen] = useState(false);
   const canExpand = !!items && items.length > 0;
@@ -63,17 +59,13 @@ function Row({ icon, title, subtitle, primary, secondary, color, badge, items }:
         onClick={() => canExpand && setOpen(v => !v)}
       >
         <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
-          style={{ background: color + "20" }}>
-          {icon}
-        </div>
+          style={{ background: color + "20" }}>{icon}</div>
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-1 flex-wrap">
             <span className="text-sm font-semibold text-gray-800 truncate">{title}</span>
             {badge && (
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0"
-                style={{ background: color + "25", color }}>
-                {badge}
-              </span>
+                style={{ background: color + "25", color }}>{badge}</span>
             )}
           </div>
           <div className="text-[10px] text-gray-400 truncate">{subtitle}</div>
@@ -97,173 +89,266 @@ function Row({ icon, title, subtitle, primary, secondary, color, badge, items }:
   );
 }
 
-// ── Grand total card (extracted to avoid IIFE useState) ─────────────────────
+// ── Year 1 payment card ─────────────────────────────────────────────────────
 
-interface GrandTotalProps {
-  groups:          { id: string; label: string; total: number; billingType: GroupBillingType }[];
+interface Year1CardProps {
+  monthlyAnnual:  number;   // recurringUSD × 12
+  yearlyPayment:  number;   // yearly groups × 12
+  onetimePayment: number;   // onetime groups + dev + one-time add
+  fmt: (usd: number) => string;
+  fmtAlt: (usd: number) => string;
+}
+function Year1Card({ monthlyAnnual, yearlyPayment, onetimePayment, fmt, fmtAlt }: Year1CardProps) {
+  const total = monthlyAnnual + yearlyPayment + onetimePayment;
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#0F172A" }}>
+      <div className="px-4 pt-3 pb-1">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+          📅 Year 1 — Total to Pay
+        </div>
+        {monthlyAnnual > 0 && (
+          <div className="flex justify-between items-center py-1 border-b border-white/5">
+            <span className="text-xs text-slate-400">Monthly recurring × 12</span>
+            <span className="text-xs font-semibold text-blue-300">{fmt(monthlyAnnual)}</span>
+          </div>
+        )}
+        {yearlyPayment > 0 && (
+          <div className="flex justify-between items-center py-1 border-b border-white/5">
+            <span className="text-xs text-slate-400">Yearly payments</span>
+            <span className="text-xs font-semibold text-indigo-300">{fmt(yearlyPayment)}</span>
+          </div>
+        )}
+        {onetimePayment > 0 && (
+          <div className="flex justify-between items-center py-1 border-b border-white/5">
+            <span className="text-xs text-slate-400">One-time setup</span>
+            <span className="text-xs font-semibold text-amber-300">{fmt(onetimePayment)}</span>
+          </div>
+        )}
+      </div>
+      <div className="px-4 py-3 flex justify-between items-center" style={{ background: "#1E293B" }}>
+        <span className="text-sm font-bold text-white">Year 1 Total</span>
+        <div className="text-right">
+          <div className="text-xl font-bold text-white">{fmt(total)}</div>
+          <div className="text-[10px] text-slate-400">{fmtAlt(total)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 3-year profit column (fullscreen) ───────────────────────────────────────
+
+interface ThreeYearProps {
+  sellingPriceUSD:  number;
+  setSellingPrice:  (v: number) => void;
+  year1Cost:        number;
+  year2PlusCost:    number;
+  currency:         Currency;
+  rate:             number;
+  fmt:              (usd: number) => string;
+  fmtAlt:           (usd: number) => string;
+}
+function ThreeYearTable({
+  sellingPriceUSD, setSellingPrice,
+  year1Cost, year2PlusCost,
+  currency, rate, fmt, fmtAlt,
+}: ThreeYearProps) {
+  const annualRevenue = sellingPriceUSD * 12;
+  const years = [
+    { label: "Year 1", hint: "incl. one-time",  cost: year1Cost },
+    { label: "Year 2", hint: "recurring only",   cost: year2PlusCost },
+    { label: "Year 3", hint: "recurring only",   cost: year2PlusCost },
+  ];
+  return (
+    <div className="space-y-6">
+      {/* Selling price input */}
+      <div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Selling Price to Client</div>
+        <div className="flex items-center gap-2">
+          <span className="text-lg text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
+          <input
+            type="number" min={0} step={1000}
+            className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-xl font-bold focus:outline-none focus:border-blue-400"
+            value={sellingPriceUSD > 0
+              ? (currency === "thb"
+                  ? Math.round(sellingPriceUSD * 12 * rate)
+                  : +(sellingPriceUSD * 12).toFixed(2))
+              : ""}
+            placeholder="0"
+            onChange={e => {
+              const val = Number(e.target.value);
+              setSellingPrice(currency === "thb" ? val / rate / 12 : val / 12);
+            }}
+          />
+          <span className="text-sm text-gray-400 whitespace-nowrap">/yr</span>
+        </div>
+        {annualRevenue > 0 && (
+          <div className="text-xs text-gray-400 mt-1 ml-7">{fmtAlt(annualRevenue)} annually</div>
+        )}
+      </div>
+
+      {/* 3-year grid */}
+      <div className="grid grid-cols-3 gap-4">
+        {years.map((yr, i) => {
+          const profit = annualRevenue - yr.cost;
+          const margin = annualRevenue > 0 ? (profit / annualRevenue) * 100 : 0;
+          const isPos  = profit >= 0;
+          const borderColor = i === 0 ? "#BFDBFE" : "#BBF7D0";
+          const bgColor     = i === 0 ? "#EFF6FF" : "#F0FDF4";
+          const headerBg    = i === 0 ? "#DBEAFE" : "#DCFCE7";
+          const labelColor  = i === 0 ? "#1D4ED8" : "#15803D";
+          return (
+            <div key={i} className="rounded-2xl border-2 overflow-hidden flex flex-col"
+              style={{ borderColor, background: bgColor }}>
+              {/* Header */}
+              <div className="px-4 py-2.5 flex justify-between items-center"
+                style={{ background: headerBg }}>
+                <span className="text-sm font-bold" style={{ color: labelColor }}>{yr.label}</span>
+                <span className="text-[10px]" style={{ color: labelColor + "99" }}>{yr.hint}</span>
+              </div>
+              {/* Body */}
+              <div className="px-4 py-3 flex-1 space-y-2">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Revenue /yr</span>
+                  <span className="font-medium text-gray-700">{annualRevenue > 0 ? fmt(annualRevenue) : "—"}</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Cost /yr</span>
+                  <span className="font-medium text-red-400">–{fmt(yr.cost)}</span>
+                </div>
+                <div className="border-t pt-2" style={{ borderColor }}>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs font-semibold" style={{ color: labelColor }}>Profit</span>
+                    <span className={`text-base font-bold ${isPos ? "text-green-600" : "text-red-500"}`}>
+                      {isPos ? "+" : ""}{annualRevenue > 0 ? fmt(profit) : "—"}
+                    </span>
+                  </div>
+                  {annualRevenue > 0 && (
+                    <>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: headerBg }}>
+                          <div className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, Math.abs(margin))}%`,
+                              background: isPos ? "#22C55E" : "#EF4444",
+                            }} />
+                        </div>
+                        <span className={`text-xs font-bold w-12 text-right shrink-0 ${isPos ? "text-green-600" : "text-red-500"}`}>
+                          {margin.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">{fmtAlt(profit)}</div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cost reference */}
+      <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
+        <div className="font-semibold text-gray-600 mb-1.5">Cost reference</div>
+        <div className="flex justify-between">
+          <span>Year 1 cost (incl. one-time)</span>
+          <span className="font-medium text-gray-700">{fmt(year1Cost)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Year 2+ cost (recurring)</span>
+          <span className="font-medium text-gray-700">{fmt(year2PlusCost)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Cost breakdown column (fullscreen left) ─────────────────────────────────
+
+interface CostColumnProps {
+  groupBreakdowns: { id: string; label: string; billingType: GroupBillingType; total: number; services: any[] }[];
+  ungroupedNodes:  any[];
   ungroupedUSD:    number;
-  dataTransferUSD: number;
   addUSD:          number;
   subsUSD:         number;
   devUSD:          number;
-  oneTimeTotal:    number;
-  f:               number;
-  periodLabel:     string;
-  fmt:             (usd: number) => string;
-  fmtAlt:          (usd: number) => string;
+  additionalCosts: AdditionalCostItem[];
+  subscriptions:   any[];
+  monthlyAnnual:   number;
+  yearlyPayment:   number;
+  onetimePayment:  number;
+  fmt:  (usd: number) => string;
+  fmtAlt: (usd: number) => string;
+  periodLabel: string;
+  f: number;
 }
-
-function GrandTotalCard({
-  groups, ungroupedUSD, dataTransferUSD, addUSD, subsUSD, devUSD, oneTimeTotal,
-  f, periodLabel, fmt, fmtAlt,
-}: GrandTotalProps) {
-  const [open, setOpen] = useState(true);
-
-  const recurringGroups = groups.filter(g => g.billingType === "monthly");
-  const yearlyGroups    = groups.filter(g => g.billingType === "yearly");
-  const onetimeGroups   = groups.filter(g => g.billingType === "onetime");
-
-  // Recurring total: monthly groups + ungrouped + data transfer + additional + subs
-  const recurringUSD =
-    recurringGroups.reduce((s, g) => s + g.total, 0) +
-    ungroupedUSD + dataTransferUSD + addUSD + subsUSD;
-  // Yearly groups: full cost per year (not amortised)
-  const yearlyGroupsUSD = yearlyGroups.reduce((s, g) => s + g.total * 12, 0);
-  // One-time: onetime groups + dev + legacy one-time
-  const onetimeTotal = onetimeGroups.reduce((s, g) => s + g.total, 0) + devUSD + oneTimeTotal;
-
-  // Display total per period: recurring*f + (yearly shown as /yr always) + onetime (flat)
-  const recurringDisplay = recurringUSD * f;
-
+function CostColumn({
+  groupBreakdowns, ungroupedNodes, ungroupedUSD,
+  addUSD, subsUSD, devUSD,
+  additionalCosts, subscriptions,
+  monthlyAnnual, yearlyPayment, onetimePayment,
+  fmt, fmtAlt, periodLabel, f,
+}: CostColumnProps) {
   return (
-    <div className="rounded-xl bg-gray-900 text-white overflow-hidden">
-      <button
-        className="w-full flex items-center gap-2 px-4 py-3 hover:bg-white/5 transition-colors"
-        onClick={() => setOpen(v => !v)}
-      >
-        <div className="flex-1 text-left">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Cost Summary</div>
-          {!open && (
-            <div className="text-lg font-bold text-white leading-tight whitespace-nowrap mt-0.5">
-              {fmt(recurringDisplay)}
-            </div>
-          )}
-        </div>
-        {open
-          ? <ChevronUp   size={14} className="text-gray-500 shrink-0" />
-          : <ChevronDown size={14} className="text-gray-500 shrink-0" />}
-      </button>
+    <div className="space-y-3">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 pb-1">Cost Breakdown</div>
 
-      {open && (
-        <div className="px-4 pb-3 space-y-1.5 border-t border-white/10 pt-2">
+      {groupBreakdowns.map(g => {
+        const bColor = BILLING_COLORS[g.billingType];
+        const bLabel = BILLING_LABELS[g.billingType];
+        const displayAmt = g.billingType === "onetime" ? g.total : g.billingType === "yearly" ? g.total * 12 : g.total * f;
+        const suffix = g.billingType === "onetime" ? "" : g.billingType === "yearly" ? "/yr" : `/${periodLabel}`;
+        return (
+          <Row key={g.id} icon="📦" title={g.label} color={bColor} badge={bLabel}
+            subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
+            primary={fmt(displayAmt) + suffix} secondary={fmtAlt(displayAmt) + suffix}
+            items={g.services.map((n: any) => ({ label: n.label, amount: fmt(n.monthly * f) }))}
+          />
+        );
+      })}
 
-          {/* Monthly groups */}
-          {recurringGroups.map(g => (
-            <div key={g.id} className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
-              <span className="text-[9px] text-blue-400 shrink-0">monthly</span>
-              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(g.total * f)}
-              </span>
-            </div>
-          ))}
-          {ungroupedUSD > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔧 Ungrouped</span>
-              <span className="text-[9px] text-blue-400 shrink-0">monthly</span>
-              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(ungroupedUSD * f)}
-              </span>
-            </div>
-          )}
-          {addUSD > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📋 Additional</span>
-              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(addUSD * f)}
-              </span>
-            </div>
-          )}
-          {subsUSD > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔄 Subscriptions</span>
-              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(subsUSD * f)}
-              </span>
-            </div>
-          )}
-
-          {/* Recurring subtotal */}
-          {(recurringGroups.length > 0 || ungroupedUSD > 0 || addUSD > 0 || subsUSD > 0) && (
-            <div className="flex items-center gap-2 border-t border-white/10 pt-1.5">
-              <span className="text-gray-300 text-xs font-semibold flex-1">Recurring /{periodLabel}</span>
-              <span className="font-bold text-orange-300 text-sm shrink-0 whitespace-nowrap">
-                {fmt(recurringDisplay)}
-              </span>
-            </div>
-          )}
-
-          {/* Yearly groups */}
-          {yearlyGroups.length > 0 && (
-            <>
-              <div className="border-t border-white/10 pt-1.5">
-                {yearlyGroups.map(g => (
-                  <div key={g.id} className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
-                    <span className="text-[9px] text-indigo-400 shrink-0">yearly</span>
-                    <span className="font-semibold text-indigo-300 text-xs shrink-0 whitespace-nowrap">
-                      {fmt(g.total * 12)}/yr
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-300 text-xs font-semibold flex-1">Yearly total</span>
-                  <span className="font-bold text-indigo-300 text-sm shrink-0 whitespace-nowrap">
-                    {fmt(yearlyGroupsUSD)}/yr
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* One-time groups */}
-          {(onetimeGroups.length > 0 || devUSD > 0 || oneTimeTotal > 0) && (
-            <div className="border-t border-white/10 pt-1.5 space-y-1">
-              {onetimeGroups.map(g => (
-                <div key={g.id} className="flex items-center gap-2">
-                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
-                  <span className="text-[9px] text-amber-400 shrink-0">one-time</span>
-                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
-                    {fmt(g.total)}
-                  </span>
-                </div>
-              ))}
-              {devUSD > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost</span>
-                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
-                    {fmt(devUSD)}
-                  </span>
-                </div>
-              )}
-              {oneTimeTotal > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 One-time setup</span>
-                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
-                    {fmt(oneTimeTotal)}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <span className="text-gray-300 text-xs font-semibold flex-1">One-time total</span>
-                <span className="font-bold text-amber-300 text-sm shrink-0 whitespace-nowrap">
-                  {fmt(onetimeTotal)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+      {ungroupedNodes.length > 0 && (
+        <Row icon="🔧" title="Ungrouped" color="#94A3B8"
+          subtitle={`${ungroupedNodes.length} service${ungroupedNodes.length !== 1 ? "s" : ""}`}
+          primary={fmt(ungroupedUSD * f)} secondary={fmtAlt(ungroupedUSD * f)}
+          items={ungroupedNodes.map((n: any) => ({ label: n.label, amount: fmt(n.monthly * f) }))}
+        />
       )}
+
+      {additionalCosts.filter(c => c.billingPeriod !== "one-time").length > 0 && (
+        <Row icon="📋" title="Additional Costs" color="#0EA5E9"
+          subtitle={`${additionalCosts.filter(c => c.billingPeriod !== "one-time").length} items`}
+          primary={fmt(addUSD * f)} secondary={fmtAlt(addUSD * f)}
+          items={additionalCosts.filter(c => c.billingPeriod !== "one-time").map(c => ({
+            label: c.label || c.category, amount: fmt(recurringMonthly(c) * f),
+          }))}
+        />
+      )}
+
+      {subscriptions.length > 0 && (
+        <Row icon="🔄" title="Subscriptions" color="#6366F1"
+          subtitle={subscriptions.map((s: any) => s.service).join(", ")}
+          primary={fmt(subsUSD * f)} secondary={fmtAlt(subsUSD * f)}
+          items={subscriptions.map((s: any) => ({
+            label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
+            amount: fmt(subMonthly(s) * f),
+          }))}
+        />
+      )}
+
+      {devUSD > 0 && (
+        <Row icon="🔗" title="Dev Cost" color="#0EA5E9" badge="manday"
+          subtitle="Ungrouped API & LINE nodes"
+          primary={fmt(devUSD)} secondary={fmtAlt(devUSD)} items={[]}
+        />
+      )}
+
+      <Year1Card
+        monthlyAnnual={monthlyAnnual}
+        yearlyPayment={yearlyPayment}
+        onetimePayment={onetimePayment}
+        fmt={fmt} fmtAlt={fmtAlt}
+      />
     </div>
   );
 }
@@ -277,20 +362,20 @@ export function SummaryTab({ rate }: { rate: number }) {
     sellingPriceUSD, setSellingPrice,
   } = useCanvasStore();
 
-  const [period,   setPeriod]   = useState<Period>("monthly");
-  const [currency, setCurrency] = useState<Currency>("thb");
+  const [currency,    setCurrency]    = useState<Currency>("thb");
+  const [fullscreen,  setFullscreen]  = useState(false);
+  const [grandOpen,   setGrandOpen]   = useState(true);
 
   const cost = calculateDiagramCost(nodes, edges, billingModel);
-  const f    = periodFactor(period);
 
   const fmt    = (usd: number) => currency === "thb" ? fmtTHB(usd * rate) : fmtUSD(usd);
   const fmtAlt = (usd: number) => currency === "thb" ? fmtUSD(usd) : fmtTHB(usd * rate);
 
-  // ── Dev nodes — only ungrouped ones (grouped dev nodes are in their group total) ──
+  // ── Dev nodes (ungrouped only) ────────────────────────────────────────────
   const devNodes = cost.perNode.filter(n => {
     if (!API_LINE_TYPES.has(n.serviceType)) return false;
     const nd = nodes.find(x => x.id === n.nodeId);
-    return !nd?.parentId; // skip if already inside a group
+    return !nd?.parentId;
   });
   const devUSD = devNodes.reduce((s, n) => s + n.monthly, 0);
 
@@ -304,83 +389,147 @@ export function SummaryTab({ rate }: { rate: number }) {
       });
       const billingType: GroupBillingType = (g.data.config as any)?.billingType ?? "monthly";
       return {
-        id:          g.id,
-        label:       g.data.label as string,
-        billingType,
-        total:       services.reduce((s, n) => s + n.monthly, 0),
-        services,
+        id: g.id, label: g.data.label as string, billingType,
+        total: services.reduce((s, n) => s + n.monthly, 0), services,
       };
     }).filter(g => g.services.length > 0);
   }, [nodes, cost.perNode]);
 
-  // ── Ungrouped (non-dev, no parent) ────────────────────────────────────────
+  const onetimeGroups = groupBreakdowns.filter(g => g.billingType === "onetime");
+  const yearlyGroups  = groupBreakdowns.filter(g => g.billingType === "yearly");
+  const monthlyGroups = groupBreakdowns.filter(g => g.billingType === "monthly");
+
+  // ── Ungrouped (non-dev) ───────────────────────────────────────────────────
   const ungroupedNodes = useMemo(() =>
     cost.perNode.filter(n => {
-      if (API_LINE_TYPES.has(n.serviceType)) return false; // dev has own row
+      if (API_LINE_TYPES.has(n.serviceType)) return false;
       const nd = nodes.find(x => x.id === n.nodeId);
       return !nd?.parentId;
     }),
   [cost.perNode, nodes]);
   const ungroupedUSD = ungroupedNodes.reduce((s, n) => s + n.monthly, 0);
 
-  // ── Other totals ──────────────────────────────────────────────────────────
-  const addUSD       = additionalCosts.reduce((s, c) => s + recurringMonthly(c), 0);
-  const subsUSD      = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
-  const oneTimeSetup = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
-  const oneTimeAdd   = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
-  const oneTimeTotal = oneTimeSetup + oneTimeAdd;
+  // ── Costs ─────────────────────────────────────────────────────────────────
+  const addUSD     = additionalCosts.reduce((s, c) => s + recurringMonthly(c), 0);
+  const subsUSD    = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
+  const oneTimeAdd = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
+  const oneTimeSetupGroups = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
 
-  // recurringUSD = only monthly groups + ungrouped + data transfer + additional + subs
+  // recurringUSD = everything truly monthly (monthly groups + ungrouped + add + subs)
   const recurringUSD =
-    groupBreakdowns.filter(g => g.billingType === "monthly").reduce((s, g) => s + g.total, 0) +
+    monthlyGroups.reduce((s, g) => s + g.total, 0) +
     ungroupedUSD + cost.dataTransfer.monthly + addUSD + subsUSD;
 
-  const periodLabel = period === "yearly" ? "yr" : "mo";
+  // Year 1 payment buckets
+  const monthlyAnnual  = recurringUSD * 12;
+  const yearlyPayment  = yearlyGroups.reduce((s, g) => s + g.total * 12, 0);
+  const onetimePayment =
+    onetimeGroups.reduce((s, g) => s + g.total, 0) +
+    devUSD + oneTimeAdd + oneTimeSetupGroups;
 
-  // ── Revenue & Profit ──────────────────────────────────────────────────────
-  const annualRevenue = sellingPriceUSD * 12;
-  const year1Cost     = recurringUSD * 12 + devUSD + oneTimeTotal;
-  const year1Profit   = annualRevenue - year1Cost;
-  const year1Margin   = annualRevenue > 0 ? (year1Profit / annualRevenue) * 100 : 0;
-  const year2Cost     = recurringUSD * 12;
-  const year2Profit   = annualRevenue - year2Cost;
-  const year2Margin   = annualRevenue > 0 ? (year2Profit / annualRevenue) * 100 : 0;
+  const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
+  const year2PlusCost = monthlyAnnual + yearlyPayment;
 
-  const isEmpty =
-    groupBreakdowns.length === 0 && ungroupedNodes.length === 0 &&
+  const isEmpty = groupBreakdowns.length === 0 && ungroupedNodes.length === 0 &&
     additionalCosts.length === 0 && subscriptions.length === 0 && devUSD === 0;
 
-  return (
-    <div className="flex flex-col h-full">
-
-      {/* ── Controls ──────────────────────────────────────────────────────── */}
-      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
-        <div className="flex gap-2">
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium flex-1">
-            {(["monthly", "yearly"] as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className="flex-1 py-1.5 transition-colors"
-                style={period === p
-                  ? { background: "#1D6FCA", color: "white" }
-                  : { background: "white", color: "#64748B" }}>
-                {p === "monthly" ? "Monthly" : "Yearly"}
-              </button>
-            ))}
+  // ── Fullscreen view ───────────────────────────────────────────────────────
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col overflow-hidden">
+        {/* Topbar */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 shrink-0 bg-white">
+          <div className="flex items-center gap-4">
+            <h1 className="text-base font-bold text-gray-900">Cost Summary — Presentation</h1>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+              {(["thb", "usd"] as Currency[]).map(c => (
+                <button key={c} onClick={() => setCurrency(c)}
+                  className="px-3 py-1.5 transition-colors"
+                  style={currency === c
+                    ? { background: "#0891B2", color: "white" }
+                    : { background: "white", color: "#64748B" }}>
+                  {c === "thb" ? "฿ THB" : "$ USD"}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium flex-1">
-            <button className="flex-1 py-1.5 transition-colors"
-              style={currency === "thb" ? { background: "#0891B2", color: "white" } : { background: "white", color: "#64748B" }}
-              onClick={() => setCurrency("thb")}>฿ THB</button>
-            <button className="flex-1 py-1.5 transition-colors"
-              style={currency === "usd" ? { background: "#0891B2", color: "white" } : { background: "white", color: "#64748B" }}
-              onClick={() => setCurrency("usd")}>$ USD</button>
+          <button onClick={() => setFullscreen(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 2-column body */}
+        <div className="flex-1 overflow-hidden grid grid-cols-2 divide-x divide-gray-200">
+          {/* Left — Cost */}
+          <div className="overflow-y-auto px-6 py-5">
+            <CostColumn
+              groupBreakdowns={groupBreakdowns}
+              ungroupedNodes={ungroupedNodes}
+              ungroupedUSD={ungroupedUSD}
+              addUSD={addUSD}
+              subsUSD={subsUSD}
+              devUSD={devUSD}
+              additionalCosts={additionalCosts}
+              subscriptions={subscriptions}
+              monthlyAnnual={monthlyAnnual}
+              yearlyPayment={yearlyPayment}
+              onetimePayment={onetimePayment}
+              fmt={fmt}
+              fmtAlt={fmtAlt}
+              periodLabel="mo"
+              f={1}
+            />
+          </div>
+
+          {/* Right — Revenue */}
+          <div className="overflow-y-auto px-6 py-5">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 pb-3">Revenue & Profit (3-Year)</div>
+            <ThreeYearTable
+              sellingPriceUSD={sellingPriceUSD}
+              setSellingPrice={setSellingPrice}
+              year1Cost={year1Cost}
+              year2PlusCost={year2PlusCost}
+              currency={currency}
+              rate={rate}
+              fmt={fmt}
+              fmtAlt={fmtAlt}
+            />
           </div>
         </div>
       </div>
+    );
+  }
 
-      {/* ── Content ───────────────────────────────────────────────────────── */}
+  // ── Normal panel view ─────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col h-full">
+
+      {/* Controls */}
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+        <div className="flex gap-2 items-center">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium flex-1">
+            {(["thb", "usd"] as Currency[]).map(c => (
+              <button key={c} onClick={() => setCurrency(c)}
+                className="flex-1 py-1.5 transition-colors"
+                style={currency === c
+                  ? { background: "#0891B2", color: "white" }
+                  : { background: "white", color: "#64748B" }}>
+                {c === "thb" ? "฿ THB" : "$ USD"}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setFullscreen(true)}
+            title="Fullscreen presentation"
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors shrink-0"
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-
         {isEmpty && (
           <div className="text-center text-gray-400 text-sm py-10">
             Drop services or add<br />costs to begin
@@ -391,53 +540,33 @@ export function SummaryTab({ rate }: { rate: number }) {
         {groupBreakdowns.map(g => {
           const bColor = BILLING_COLORS[g.billingType];
           const bLabel = BILLING_LABELS[g.billingType];
-          // onetime: show flat total; yearly: total×12/yr; monthly: total×f
-          const displayAmt =
-            g.billingType === "onetime" ? g.total :
-            g.billingType === "yearly"  ? g.total * 12 :
-            g.total * f;
-          const suffix =
-            g.billingType === "onetime" ? "" :
-            g.billingType === "yearly"  ? "/yr" :
-            `/${periodLabel}`;
+          const displayAmt = g.billingType === "onetime" ? g.total : g.billingType === "yearly" ? g.total * 12 : g.total;
+          const suffix = g.billingType === "onetime" ? "" : g.billingType === "yearly" ? "/yr" : "/mo";
           return (
-            <Row key={g.id} icon="📦" title={g.label} color={bColor}
-              badge={bLabel}
+            <Row key={g.id} icon="📦" title={g.label} color={bColor} badge={bLabel}
               subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
-              primary={fmt(displayAmt) + suffix}
-              secondary={fmtAlt(displayAmt) + suffix}
-              items={g.services.map(n => ({ label: n.label, amount: fmt(n.monthly * f) }))}
+              primary={fmt(displayAmt) + suffix} secondary={fmtAlt(displayAmt) + suffix}
+              items={g.services.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
             />
           );
         })}
 
-        {/* Ungrouped services */}
+        {/* Ungrouped */}
         {ungroupedNodes.length > 0 && (
           <Row icon="🔧" title="Ungrouped" color="#94A3B8"
             subtitle={`${ungroupedNodes.length} service${ungroupedNodes.length !== 1 ? "s" : ""}`}
-            primary={fmt(ungroupedUSD * f)} secondary={fmtAlt(ungroupedUSD * f)}
-            items={ungroupedNodes.map(n => ({ label: n.label, amount: fmt(n.monthly * f) }))}
-          />
-        )}
-
-        {/* Data transfer */}
-        {cost.dataTransfer.monthly > 0 && (
-          <Row icon="🔀" title="Data Transfer" color="#64748B"
-            subtitle="Network costs"
-            primary={fmt(cost.dataTransfer.monthly * f)}
-            secondary={fmtAlt(cost.dataTransfer.monthly * f)}
-            items={[]}
+            primary={fmt(ungroupedUSD) + "/mo"} secondary={fmtAlt(ungroupedUSD) + "/mo"}
+            items={ungroupedNodes.map((n: any) => ({ label: n.label, amount: fmt(n.monthly) + "/mo" }))}
           />
         )}
 
         {/* Additional costs */}
         {additionalCosts.filter(c => c.billingPeriod !== "one-time").length > 0 && (
           <Row icon="📋" title="Additional Costs" color="#0EA5E9"
-            subtitle={`${additionalCosts.filter(c => c.billingPeriod !== "one-time").length} item${additionalCosts.filter(c => c.billingPeriod !== "one-time").length !== 1 ? "s" : ""}`}
-            primary={fmt(addUSD * f)} secondary={fmtAlt(addUSD * f)}
+            subtitle={`${additionalCosts.filter(c => c.billingPeriod !== "one-time").length} items`}
+            primary={fmt(addUSD) + "/mo"} secondary={fmtAlt(addUSD) + "/mo"}
             items={additionalCosts.filter(c => c.billingPeriod !== "one-time").map(c => ({
-              label:  c.label || c.category,
-              amount: fmt(recurringMonthly(c) * f),
+              label: c.label || c.category, amount: fmt(recurringMonthly(c)) + "/mo",
             }))}
           />
         )}
@@ -445,184 +574,187 @@ export function SummaryTab({ rate }: { rate: number }) {
         {/* Subscriptions */}
         {subscriptions.length > 0 && (
           <Row icon="🔄" title="Subscriptions" color="#6366F1"
-            subtitle={subscriptions.map(s => s.service).join(", ")}
-            primary={fmt(subsUSD * f)} secondary={fmtAlt(subsUSD * f)}
-            items={subscriptions.map(s => ({
-              label:  `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-              amount: fmt(subMonthly(s) * f),
+            subtitle={subscriptions.map((s: any) => s.service).join(", ")}
+            primary={fmt(subsUSD) + "/mo"} secondary={fmtAlt(subsUSD) + "/mo"}
+            items={subscriptions.map((s: any) => ({
+              label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
+              amount: fmt(subMonthly(s)) + "/mo",
             }))}
           />
         )}
 
-        {/* Dev cost (manday) */}
+        {/* Dev cost (ungrouped only) */}
         {devUSD > 0 && (
-          <Row icon="🔗" title="Dev Cost" color="#0EA5E9"
-            badge="manday"
-            subtitle={devNodes.map(n => n.label).join(", ") || "API & LINE nodes"}
-            primary={fmt(devUSD)}
-            secondary={fmtAlt(devUSD)}
-            items={devNodes.map(n => ({ label: n.label, amount: fmt(n.monthly) }))}
+          <Row icon="🔗" title="Dev Cost" color="#0EA5E9" badge="manday"
+            subtitle="Ungrouped API & LINE nodes"
+            primary={fmt(devUSD)} secondary={fmtAlt(devUSD)} items={[]}
           />
         )}
 
-        {/* One-time setup */}
-        {oneTimeTotal > 0 && (
-          <Row icon="📦" title="One-time Setup" color="#F59E0B"
-            subtitle="Paid once at project start"
-            primary={fmt(oneTimeTotal)} secondary={fmtAlt(oneTimeTotal)}
-            items={[
-              ...cost.setupCosts.map(s => ({ label: s.label, amount: fmt(s.amountUSD) })),
-              ...additionalCosts.filter(c => c.billingPeriod === "one-time").map(c => ({
-                label: c.label || c.category, amount: fmt(oneTimeAmount(c)),
-              })),
-            ]}
-          />
-        )}
-
-        {/* Grand total */}
+        {/* ── Year 1 card ───────────────────────────────────────────────── */}
         {!isEmpty && (
-          <GrandTotalCard
-            groups={groupBreakdowns}
-            ungroupedUSD={ungroupedUSD}
-            dataTransferUSD={cost.dataTransfer.monthly}
-            addUSD={addUSD}
-            subsUSD={subsUSD}
-            devUSD={devUSD}
-            oneTimeTotal={oneTimeTotal}
-            f={f}
-            periodLabel={periodLabel}
-            fmt={fmt}
-            fmtAlt={fmtAlt}
+          <Year1Card
+            monthlyAnnual={monthlyAnnual}
+            yearlyPayment={yearlyPayment}
+            onetimePayment={onetimePayment}
+            fmt={fmt} fmtAlt={fmtAlt}
           />
         )}
 
-        {/* ── Revenue & Profit ─────────────────────────────────────────── */}
+        {/* ── Grand Total (collapsible) ─────────────────────────────────── */}
+        {!isEmpty && (
+          <div className="rounded-xl bg-gray-800 text-white overflow-hidden">
+            <button
+              className="w-full flex items-center gap-2 px-4 py-3 hover:bg-white/5 transition-colors"
+              onClick={() => setGrandOpen(v => !v)}
+            >
+              <div className="flex-1 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                Cost by Type
+              </div>
+              {grandOpen
+                ? <ChevronUp size={14} className="text-gray-500 shrink-0" />
+                : <ChevronDown size={14} className="text-gray-500 shrink-0" />}
+            </button>
+            {grandOpen && (
+              <div className="px-4 pb-3 space-y-1 border-t border-white/10 pt-2">
+                {monthlyGroups.map(g => (
+                  <div key={g.id} className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs flex-1 truncate">📦 {g.label}</span>
+                    <span className="text-[9px] text-blue-400 shrink-0">monthly</span>
+                    <span className="text-xs font-semibold text-blue-300 shrink-0">{fmt(g.total)}/mo</span>
+                  </div>
+                ))}
+                {(ungroupedUSD > 0 || addUSD > 0 || subsUSD > 0) && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs flex-1 truncate">Other recurring</span>
+                    <span className="text-xs font-semibold text-blue-300 shrink-0">{fmt(recurringUSD - monthlyGroups.reduce((s,g)=>s+g.total,0))}/mo</span>
+                  </div>
+                )}
+                {recurringUSD > 0 && (
+                  <div className="flex items-center gap-2 border-t border-white/10 pt-1">
+                    <span className="text-gray-300 text-xs font-semibold flex-1">Recurring /mo</span>
+                    <span className="text-sm font-bold text-orange-300">{fmt(recurringUSD)}</span>
+                  </div>
+                )}
+                {yearlyGroups.length > 0 && (
+                  <>
+                    <div className="border-t border-white/10 pt-1">
+                      {yearlyGroups.map(g => (
+                        <div key={g.id} className="flex items-center gap-2 mb-1">
+                          <span className="text-gray-400 text-xs flex-1 truncate">📦 {g.label}</span>
+                          <span className="text-[9px] text-indigo-400 shrink-0">yearly</span>
+                          <span className="text-xs font-semibold text-indigo-300 shrink-0">{fmt(g.total * 12)}/yr</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-300 text-xs font-semibold flex-1">Yearly total</span>
+                        <span className="text-sm font-bold text-indigo-300">{fmt(yearlyPayment)}/yr</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {onetimeGroups.length > 0 && (
+                  <div className="border-t border-white/10 pt-1 space-y-1">
+                    {onetimeGroups.map(g => (
+                      <div key={g.id} className="flex items-center gap-2">
+                        <span className="text-gray-400 text-xs flex-1 truncate">📦 {g.label}</span>
+                        <span className="text-[9px] text-amber-400 shrink-0">one-time</span>
+                        <span className="text-xs font-semibold text-amber-300 shrink-0">{fmt(g.total)}</span>
+                      </div>
+                    ))}
+                    {devUSD > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400 text-xs flex-1 truncate">🔗 Dev cost</span>
+                        <span className="text-xs font-semibold text-amber-300 shrink-0">{fmt(devUSD)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-300 text-xs font-semibold flex-1">One-time total</span>
+                      <span className="text-sm font-bold text-amber-300">{fmt(onetimePayment)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Revenue & Profit (panel compact) ─────────────────────────── */}
         <div className="rounded-xl border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-3 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-            Revenue & Profit
+          <div className="bg-gray-50 px-3 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+            <span>Revenue & Profit</span>
+            <button onClick={() => setFullscreen(true)}
+              className="text-[9px] text-blue-500 hover:text-blue-700 font-semibold flex items-center gap-1">
+              <Maximize2 size={10} /> Full view
+            </button>
           </div>
           <div className="px-3 py-3 space-y-3">
-
-            {/* Selling price input */}
             <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
-              {currency === "thb"
-                ? `Selling price to client (THB/${periodLabel})`
-                : `Selling price to client (USD/${periodLabel})`}
+              {currency === "thb" ? "Selling price /yr (THB)" : "Selling price /yr (USD)"}
               <div className="flex items-center gap-1.5">
                 <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
                 <input
-                  type="number" min={0} step={100}
+                  type="number" min={0} step={1000}
                   className="flex-1 border rounded px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400"
                   value={sellingPriceUSD > 0
                     ? (currency === "thb"
-                        ? Math.round(sellingPriceUSD * f * rate)
-                        : +(sellingPriceUSD * f).toFixed(2))
+                        ? Math.round(sellingPriceUSD * 12 * rate)
+                        : +(sellingPriceUSD * 12).toFixed(2))
                     : ""}
                   placeholder="0"
                   onChange={e => {
                     const val = Number(e.target.value);
-                    setSellingPrice(currency === "thb" ? val / rate / f : val / f);
+                    setSellingPrice(currency === "thb" ? val / rate / 12 : val / 12);
                   }}
                 />
+                <span className="text-xs text-gray-400">/yr</span>
               </div>
             </label>
 
             {sellingPriceUSD > 0 && (
-              <div className="space-y-3 pt-1 border-t border-gray-100">
-
-                {/* Annual revenue */}
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-gray-500 font-medium">Annual Revenue</span>
-                  <div className="text-right">
-                    <div className="font-bold text-gray-800 whitespace-nowrap">{fmt(annualRevenue)}</div>
-                    <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(annualRevenue)}/yr</div>
-                  </div>
-                </div>
-
-                {/* Year 1 */}
-                <div className="rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
-                  <div className="px-3 py-2 bg-blue-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">📅 Year 1</span>
-                    <span className="text-[9px] text-blue-500">incl. dev + one-time</span>
-                  </div>
-                  <div className="px-3 py-2 space-y-1">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Recurring /yr</span>
-                      <span className="whitespace-nowrap">–{fmt(recurringUSD * 12)}</span>
-                    </div>
-                    {devUSD > 0 && (
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Dev cost</span>
-                        <span className="whitespace-nowrap">–{fmt(devUSD)}</span>
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                {[
+                  { label: "📅 Year 1", cost: year1Cost, hint: "incl. one-time", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
+                  { label: "📈 Year 2+", cost: year2PlusCost, hint: "recurring", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+                ].map((yr, i) => {
+                  const annualRevenue = sellingPriceUSD * 12;
+                  const profit = annualRevenue - yr.cost;
+                  const margin = annualRevenue > 0 ? (profit / annualRevenue) * 100 : 0;
+                  const isPos  = profit >= 0;
+                  return (
+                    <div key={i} className="rounded-xl border-2 overflow-hidden" style={{ borderColor: yr.border, background: yr.bg }}>
+                      <div className="px-3 py-1.5 flex justify-between" style={{ background: yr.hbg }}>
+                        <span className="text-[10px] font-bold" style={{ color: yr.lc }}>{yr.label}</span>
+                        <span className="text-[9px]" style={{ color: yr.lc + "99" }}>{yr.hint}</span>
                       </div>
-                    )}
-                    {oneTimeTotal > 0 && (
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>One-time setup</span>
-                        <span className="whitespace-nowrap">–{fmt(oneTimeTotal)}</span>
-                      </div>
-                    )}
-                    <div className="border-t border-blue-200 pt-1.5 flex justify-between items-center">
-                      <span className="text-sm font-bold text-blue-700">Profit</span>
-                      <div className="text-right">
-                        <span className={`text-base font-bold whitespace-nowrap ${year1Profit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                          {year1Profit >= 0 ? "+" : ""}{fmt(year1Profit)}
-                        </span>
-                        <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(year1Profit)}</div>
+                      <div className="px-3 py-2 space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Revenue /yr</span><span>{fmt(annualRevenue)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Cost /yr</span><span>–{fmt(yr.cost)}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-1" style={{ borderColor: yr.border }}>
+                          <span className="text-sm font-bold" style={{ color: yr.lc }}>Profit</span>
+                          <span className={`text-base font-bold ${isPos ? "text-green-600" : "text-red-500"}`}>
+                            {isPos ? "+" : ""}{fmt(profit)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: yr.hbg }}>
+                            <div className="h-full rounded-full" style={{
+                              width: `${Math.min(100, Math.abs(margin))}%`,
+                              background: isPos ? "#22C55E" : "#EF4444",
+                            }} />
+                          </div>
+                          <span className={`text-xs font-bold w-12 text-right ${isPos ? "text-green-600" : "text-red-500"}`}>
+                            {margin.toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 pt-0.5">
-                      <span className="text-[10px] text-gray-400 shrink-0">Margin</span>
-                      <div className="flex-1 h-1.5 bg-blue-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{
-                            width:      `${Math.min(100, Math.abs(year1Margin))}%`,
-                            background: year1Margin >= 0 ? "#22C55E" : "#EF4444",
-                          }} />
-                      </div>
-                      <span className={`text-xs font-bold shrink-0 ${year1Margin >= 0 ? "text-green-600" : "text-red-500"}`}>
-                        {year1Margin.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Year 2+ */}
-                <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
-                  <div className="px-3 py-2 bg-green-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-green-700 uppercase tracking-widest">📈 Year 2+</span>
-                    <span className="text-[9px] text-green-500">recurring only</span>
-                  </div>
-                  <div className="px-3 py-2 space-y-1">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Recurring /yr</span>
-                      <span className="whitespace-nowrap">–{fmt(recurringUSD * 12)}</span>
-                    </div>
-                    <div className="border-t border-green-200 pt-1.5 flex justify-between items-center">
-                      <span className="text-sm font-bold text-green-700">Profit</span>
-                      <div className="text-right">
-                        <span className={`text-base font-bold whitespace-nowrap ${year2Profit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                          {year2Profit >= 0 ? "+" : ""}{fmt(year2Profit)}
-                        </span>
-                        <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(year2Profit)}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 pt-0.5">
-                      <span className="text-[10px] text-gray-400 shrink-0">Margin</span>
-                      <div className="flex-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{
-                            width:      `${Math.min(100, Math.abs(year2Margin))}%`,
-                            background: year2Margin >= 0 ? "#22C55E" : "#EF4444",
-                          }} />
-                      </div>
-                      <span className={`text-xs font-bold shrink-0 ${year2Margin >= 0 ? "text-green-600" : "text-red-500"}`}>
-                        {year2Margin.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
+                  );
+                })}
               </div>
             )}
           </div>
