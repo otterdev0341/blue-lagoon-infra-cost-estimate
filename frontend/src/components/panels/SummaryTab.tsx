@@ -254,6 +254,11 @@ interface ThreeYearProps {
   setYear2SellingPrice: (v: number) => void;
   monthlyChargeUSD:     number;
   setMonthlyCharge:     (v: number) => void;
+  monthlySubsList:      any[];
+  yearlySubsList:       any[];
+  monthlySubsUSD:       number;
+  yearlySubsUSD:        number;
+  subsRevenueAnnual:    number;
   year1Cost:      number;
   year2PlusCost:  number;
   monthlyAnnual:  number;
@@ -268,19 +273,20 @@ function ThreeYearTable({
   sellingPriceUSD, setSellingPrice,
   year2SellingPriceUSD, setYear2SellingPrice,
   monthlyChargeUSD, setMonthlyCharge,
+  monthlySubsList, yearlySubsList, monthlySubsUSD, yearlySubsUSD,
+  subsRevenueAnnual,
   year1Cost, year2PlusCost,
   monthlyAnnual, yearlyPayment, onetimePayment,
   currency, rate, fmt, fmtAlt,
 }: ThreeYearProps) {
-  // Year 1 = project fee + MA + monthly billing × 12
-  // Year 2+ = MA + monthly billing × 12 (no project fee)
-  const y1Revenue = (sellingPriceUSD + year2SellingPriceUSD + monthlyChargeUSD) * 12;
-  const y2Revenue = (year2SellingPriceUSD + monthlyChargeUSD) * 12;
+  // Revenue = project fee (Y1) + MA + monthly billing + subscription billing
+  const y1Revenue = sellingPriceUSD * 12 + year2SellingPriceUSD * 12 + monthlyChargeUSD * 12 + subsRevenueAnnual;
+  const y2Revenue = year2SellingPriceUSD * 12 + monthlyChargeUSD * 12 + subsRevenueAnnual;
 
   const years = [
-    { label: "Year 1", hint: "project fee + MA + monthly", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
-    { label: "Year 2", hint: "MA + monthly billing",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
-    { label: "Year 3", hint: "MA + monthly billing",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 1", hint: "fee + MA + subs + monthly", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
+    { label: "Year 2", hint: "MA + subs + monthly",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 3", hint: "MA + subs + monthly",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
   ];
 
   return (
@@ -327,6 +333,31 @@ function ThreeYearTable({
         </div>
       </div>
 
+      {/* Subscription revenue (billed to client — all years) */}
+      {(monthlySubsList.length > 0 || yearlySubsList.length > 0) && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-1">
+            💰 Subscription Revenue — billed to client
+          </div>
+          {yearlySubsList.map((s: any) => (
+            <div key={s.id} className="flex justify-between text-xs text-gray-600">
+              <span className="flex-1 truncate">{s.service}{s.plan ? ` · ${s.plan}` : ""}</span>
+              <span className="font-semibold text-emerald-600 ml-2">+{fmt(subYearlyUpfront(s))}/yr</span>
+            </div>
+          ))}
+          {monthlySubsList.map((s: any) => (
+            <div key={s.id} className="flex justify-between text-xs text-gray-600">
+              <span className="flex-1 truncate">{s.service}{s.plan ? ` · ${s.plan}` : ""}</span>
+              <span className="font-semibold text-emerald-600 ml-2">+{fmt(subMonthly(s))}/mo</span>
+            </div>
+          ))}
+          <div className="flex justify-between text-xs font-bold text-emerald-700 pt-1 border-t border-emerald-200">
+            <span>Total subscription revenue /yr</span>
+            <span>+{fmt(subsRevenueAnnual)}</span>
+          </div>
+        </div>
+      )}
+
       {/* 3-year grid */}
       <div className="grid grid-cols-3 gap-4">
         {years.map((yr, i) => {
@@ -369,6 +400,12 @@ function ThreeYearTable({
                       <div className="flex justify-between text-[10px] text-gray-400">
                         <span>↳ Monthly billing × 12</span>
                         <span className="text-green-500">+{fmt(monthlyChargeUSD * 12)}</span>
+                      </div>
+                    )}
+                    {subsRevenueAnnual > 0 && (
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>↳ Subscriptions billed</span>
+                        <span className="text-emerald-500">+{fmt(subsRevenueAnnual)}</span>
                       </div>
                     )}
                   </div>
@@ -485,10 +522,6 @@ interface CostColumnProps {
   ungroupedUSD:     number;
   devUSD:           number;
   additionalCosts:  AdditionalCostItem[];
-  monthlySubsList:  any[];
-  yearlySubsList:   any[];
-  monthlySubsUSD:   number;
-  yearlySubsUSD:    number;
   monthlyAnnual:    number;
   yearlyPayment:    number;
   onetimePayment:   number;
@@ -500,7 +533,6 @@ interface CostColumnProps {
 function CostColumn({
   groupBreakdowns, ungroupedNodes, ungroupedUSD, devUSD,
   additionalCosts,
-  monthlySubsList, yearlySubsList, monthlySubsUSD, yearlySubsUSD,
   monthlyAnnual, yearlyPayment, onetimePayment,
   addUSD, nodes,
   fmt, fmtAlt,
@@ -550,30 +582,6 @@ function CostColumn({
           primary={fmt(addUSD) + "/mo"} secondary={fmtAlt(addUSD) + "/mo"}
           items={additionalCosts.filter(c => c.billingPeriod !== "one-time").map(c => ({
             label: c.label || c.category, amount: fmt(recurringMonthly(c)) + "/mo",
-          }))}
-        />
-      )}
-
-      {/* Monthly subscriptions */}
-      {monthlySubsList.length > 0 && (
-        <Row icon="🔄" title="Subscriptions" color="#6366F1" badge="monthly"
-          subtitle={monthlySubsList.map((s: any) => s.service).join(", ")}
-          primary={fmt(monthlySubsUSD) + "/mo"} secondary={fmtAlt(monthlySubsUSD) + "/mo"}
-          items={monthlySubsList.map((s: any) => ({
-            label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-            amount: fmt(subMonthly(s)) + "/mo",
-          }))}
-        />
-      )}
-
-      {/* Yearly subscriptions */}
-      {yearlySubsList.length > 0 && (
-        <Row icon="🔄" title="Subscriptions" color="#8B5CF6" badge="yearly"
-          subtitle={yearlySubsList.map((s: any) => s.service).join(", ")}
-          primary={fmt(yearlySubsUSD) + "/yr"} secondary={fmtAlt(yearlySubsUSD) + "/yr"}
-          items={yearlySubsList.map((s: any) => ({
-            label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-            amount: fmt(subYearlyUpfront(s)) + "/yr",
           }))}
         />
       )}
@@ -669,23 +677,23 @@ export function SummaryTab({ rate }: { rate: number }) {
   const oneTimeAdd     = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
   const oneTimeSetup   = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
 
-  // Split subscriptions: monthly subs → recurring; yearly subs → yearly bucket
-  const monthlySubsUSD = subscriptions
-    .filter(s => s.billingPeriod === "monthly")
-    .reduce((sum, s) => sum + subMonthly(s), 0);
-  const yearlySubsUSD  = subscriptions
-    .filter(s => s.billingPeriod === "yearly")
-    .reduce((sum, s) => sum + subYearlyUpfront(s), 0);
+  // Subscriptions are REVENUE (billed to client), NOT costs
+  const monthlySubsList = subscriptions.filter(s => s.billingPeriod === "monthly");
+  const yearlySubsList  = subscriptions.filter(s => s.billingPeriod === "yearly");
+  const monthlySubsUSD = monthlySubsList.reduce((sum, s) => sum + subMonthly(s), 0);
+  const yearlySubsUSD  = yearlySubsList.reduce((sum, s) => sum + subYearlyUpfront(s), 0);
+  // Total subscription revenue per year (monthly × 12 + yearly upfront)
+  const subsRevenueAnnual = monthlySubsUSD * 12 + yearlySubsUSD;
 
-  // Monthly recurring (monthly groups + ungrouped + additional + monthly subs only)
+  // ── COSTS: infra groups only (no subscriptions) ────────────────────────────
+  // Monthly recurring = monthly infra groups + ungrouped AWS + additional costs
   const recurringUSD =
     monthlyGroups.reduce((s, g) => s + g.total, 0) +
-    ungroupedUSD + cost.dataTransfer.monthly + addUSD + monthlySubsUSD;
+    ungroupedUSD + cost.dataTransfer.monthly + addUSD;
 
-  // Year 1 payment buckets
   const monthlyAnnual  = recurringUSD * 12;
-  // Yearly: yearly groups + yearly subscriptions (paid once per year)
-  const yearlyPayment  = yearlyGroups.reduce((s, g) => s + g.total * 12, 0) + yearlySubsUSD;
+  // Yearly infra cost (e.g. yearly-billed cloud services) — subscriptions excluded
+  const yearlyPayment  = yearlyGroups.reduce((s, g) => s + g.total * 12, 0);
   const onetimePayment =
     onetimeGroups.reduce((s, g) => s + g.total, 0) +
     devUSD + oneTimeAdd + oneTimeSetup;
@@ -693,13 +701,11 @@ export function SummaryTab({ rate }: { rate: number }) {
   const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
   const year2PlusCost = monthlyAnnual + yearlyPayment;
 
-  // Year 1 revenue = project delivery fee + MA + monthly billing × 12
-  // Year 2+ revenue = MA + monthly billing × 12 (no project fee)
-  const y1Rev = (sellingPriceUSD + year2SellingPriceUSD + monthlyChargeUSD) * 12;
-  const y2Rev = (year2SellingPriceUSD + monthlyChargeUSD) * 12;
-
-  const monthlySubsList = subscriptions.filter(s => s.billingPeriod === "monthly");
-  const yearlySubsList  = subscriptions.filter(s => s.billingPeriod === "yearly");
+  // ── REVENUE: project fee + MA + monthly billing + subscriptions ────────────
+  // Year 1 = project fee + MA + monthly charge + subscription billing
+  // Year 2+ = MA + monthly charge + subscription billing (no project fee)
+  const y1Rev = sellingPriceUSD * 12 + year2SellingPriceUSD * 12 + monthlyChargeUSD * 12 + subsRevenueAnnual;
+  const y2Rev = year2SellingPriceUSD * 12 + monthlyChargeUSD * 12 + subsRevenueAnnual;
 
   const isEmpty = groupBreakdowns.length === 0 && ungroupedNodes.length === 0 &&
     additionalCosts.length === 0 && subscriptions.length === 0 && devUSD === 0;
@@ -740,10 +746,6 @@ export function SummaryTab({ rate }: { rate: number }) {
               ungroupedUSD={ungroupedUSD}
               devUSD={devUSD}
               additionalCosts={additionalCosts}
-              monthlySubsList={monthlySubsList}
-              yearlySubsList={yearlySubsList}
-              monthlySubsUSD={monthlySubsUSD}
-              yearlySubsUSD={yearlySubsUSD}
               monthlyAnnual={monthlyAnnual}
               yearlyPayment={yearlyPayment}
               onetimePayment={onetimePayment}
@@ -766,6 +768,11 @@ export function SummaryTab({ rate }: { rate: number }) {
               setYear2SellingPrice={setYear2SellingPrice}
               monthlyChargeUSD={monthlyChargeUSD}
               setMonthlyCharge={setMonthlyCharge}
+              monthlySubsList={monthlySubsList}
+              yearlySubsList={yearlySubsList}
+              monthlySubsUSD={monthlySubsUSD}
+              yearlySubsUSD={yearlySubsUSD}
+              subsRevenueAnnual={subsRevenueAnnual}
               year1Cost={year1Cost}
               year2PlusCost={year2PlusCost}
               monthlyAnnual={monthlyAnnual}
@@ -862,28 +869,29 @@ export function SummaryTab({ rate }: { rate: number }) {
           />
         )}
 
-        {/* Monthly subscriptions */}
-        {monthlySubsList.length > 0 && (
-          <Row icon="🔄" title="Subscriptions" color="#6366F1" badge="monthly"
-            subtitle={monthlySubsList.map(s => s.service).join(", ")}
-            primary={fmt(monthlySubsUSD) + "/mo"} secondary={fmtAlt(monthlySubsUSD) + "/mo"}
-            items={monthlySubsList.map(s => ({
-              label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-              amount: fmt(subMonthly(s)) + "/mo",
-            }))}
-          />
-        )}
-
-        {/* Yearly subscriptions — paid once per year */}
-        {yearlySubsList.length > 0 && (
-          <Row icon="🔄" title="Subscriptions" color="#8B5CF6" badge="yearly"
-            subtitle={yearlySubsList.map(s => s.service).join(", ")}
-            primary={fmt(yearlySubsUSD) + "/yr"} secondary={fmtAlt(yearlySubsUSD) + "/yr"}
-            items={yearlySubsList.map(s => ({
-              label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-              amount: fmt(subYearlyUpfront(s)) + "/yr",
-            }))}
-          />
+        {/* Subscription revenue (billed to client) */}
+        {(monthlySubsList.length > 0 || yearlySubsList.length > 0) && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 space-y-1">
+            <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">
+              💰 Subscription Revenue (billed to client)
+            </div>
+            {yearlySubsList.map(s => (
+              <div key={s.id} className="flex justify-between text-xs text-gray-600">
+                <span className="flex-1 truncate">{s.service}{s.plan ? ` · ${s.plan}` : ""}</span>
+                <span className="font-semibold text-emerald-600 ml-2">+{fmt(subYearlyUpfront(s))}/yr</span>
+              </div>
+            ))}
+            {monthlySubsList.map(s => (
+              <div key={s.id} className="flex justify-between text-xs text-gray-600">
+                <span className="flex-1 truncate">{s.service}{s.plan ? ` · ${s.plan}` : ""}</span>
+                <span className="font-semibold text-emerald-600 ml-2">+{fmt(subMonthly(s))}/mo</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-xs font-bold text-emerald-700 pt-1 border-t border-emerald-200">
+              <span>Total /yr</span>
+              <span>+{fmt(subsRevenueAnnual)}</span>
+            </div>
+          </div>
         )}
 
         {/* Ungrouped dev nodes */}
@@ -937,22 +945,22 @@ export function SummaryTab({ rate }: { rate: number }) {
                     <span className="text-xs font-semibold text-blue-300 shrink-0">{fmt(g.total)}/mo</span>
                   </div>
                 ))}
-                {(ungroupedUSD > 0 || addUSD > 0 || monthlySubsUSD > 0) && (
+                {(ungroupedUSD > 0 || addUSD > 0) && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 text-xs flex-1 truncate">Other recurring</span>
                     <span className="text-xs font-semibold text-blue-300 shrink-0">
-                      {fmt(ungroupedUSD + addUSD + monthlySubsUSD + cost.dataTransfer.monthly)}/mo
+                      {fmt(ungroupedUSD + addUSD + cost.dataTransfer.monthly)}/mo
                     </span>
                   </div>
                 )}
                 {recurringUSD > 0 && (
                   <div className="flex items-center gap-2 border-t border-white/10 pt-1">
-                    <span className="text-gray-300 text-xs font-semibold flex-1">Recurring /mo</span>
+                    <span className="text-gray-300 text-xs font-semibold flex-1">Infra recurring /mo</span>
                     <span className="text-sm font-bold text-orange-300">{fmt(recurringUSD)}</span>
                   </div>
                 )}
-                {/* Yearly groups + yearly subs */}
-                {(yearlyGroups.length > 0 || yearlySubsList.length > 0) && (
+                {/* Yearly infra groups only (subscriptions are revenue) */}
+                {yearlyGroups.length > 0 && (
                   <div className="border-t border-white/10 pt-1">
                     {yearlyGroups.map(g => (
                       <div key={g.id} className="flex items-center gap-2 mb-1">
@@ -961,15 +969,8 @@ export function SummaryTab({ rate }: { rate: number }) {
                         <span className="text-xs font-semibold text-indigo-300 shrink-0">{fmt(g.total * 12)}/yr</span>
                       </div>
                     ))}
-                    {yearlySubsList.map(s => (
-                      <div key={s.id} className="flex items-center gap-2 mb-1">
-                        <span className="text-gray-400 text-xs flex-1 truncate">🔄 {s.service}</span>
-                        <span className="text-[9px] text-violet-400 shrink-0">sub/yr</span>
-                        <span className="text-xs font-semibold text-violet-300 shrink-0">{fmt(subYearlyUpfront(s))}/yr</span>
-                      </div>
-                    ))}
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-300 text-xs font-semibold flex-1">Yearly total</span>
+                      <span className="text-gray-300 text-xs font-semibold flex-1">Yearly infra total</span>
                       <span className="text-sm font-bold text-indigo-300">{fmt(yearlyPayment)}/yr</span>
                     </div>
                   </div>
@@ -1083,18 +1084,18 @@ export function SummaryTab({ rate }: { rate: number }) {
               <div className="text-[10px] text-gray-400">Monthly billing to client (all years)</div>
             </label>
 
-            {sellingPriceUSD > 0 && (
+            {(y1Rev > 0 || y2Rev > 0) && (
               <div className="space-y-2 pt-1 border-t border-gray-100">
                 {[
                   {
-                    label: "📅 Year 1", cost: year1Cost,
-                    revenue: y1Rev,
-                    hint: "project fee + MA + monthly", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
+                    label: "📅 Year 1", cost: year1Cost, revenue: y1Rev, isYear1: true,
+                    hint: "fee + subs + MA + monthly",
+                    border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
                   },
                   {
-                    label: "📈 Year 2+", cost: year2PlusCost,
-                    revenue: y2Rev,
-                    hint: "MA + monthly billing", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
+                    label: "📈 Year 2+", cost: year2PlusCost, revenue: y2Rev, isYear1: false,
+                    hint: "subs + MA + monthly",
+                    border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
                   },
                 ].map((yr, i) => {
                   const profit = yr.revenue - yr.cost;
@@ -1108,9 +1109,30 @@ export function SummaryTab({ rate }: { rate: number }) {
                       </div>
                       <div className="px-3 py-2 space-y-1">
                         <div className="flex justify-between text-xs text-gray-500">
-                          <span>Revenue /yr</span><span>{fmt(yr.revenue)}</span>
+                          <span>Revenue /yr</span><span className="font-medium">{fmt(yr.revenue)}</span>
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500">
+                        {/* Revenue breakdown */}
+                        {yr.isYear1 && sellingPriceUSD > 0 && (
+                          <div className="flex justify-between text-[10px] text-gray-400">
+                            <span>↳ Project fee</span><span className="text-amber-500">+{fmt(sellingPriceUSD * 12)}</span>
+                          </div>
+                        )}
+                        {subsRevenueAnnual > 0 && (
+                          <div className="flex justify-between text-[10px] text-gray-400">
+                            <span>↳ Subscriptions</span><span className="text-emerald-500">+{fmt(subsRevenueAnnual)}</span>
+                          </div>
+                        )}
+                        {year2SellingPriceUSD > 0 && (
+                          <div className="flex justify-between text-[10px] text-gray-400">
+                            <span>↳ MA /yr</span><span className="text-indigo-500">+{fmt(year2SellingPriceUSD * 12)}</span>
+                          </div>
+                        )}
+                        {monthlyChargeUSD > 0 && (
+                          <div className="flex justify-between text-[10px] text-gray-400">
+                            <span>↳ Monthly × 12</span><span className="text-green-500">+{fmt(monthlyChargeUSD * 12)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs text-gray-500 border-t pt-1" style={{ borderColor: yr.border }}>
                           <span>Cost /yr</span><span>–{fmt(yr.cost)}</span>
                         </div>
                         <div className="flex justify-between items-center border-t pt-1" style={{ borderColor: yr.border }}>
