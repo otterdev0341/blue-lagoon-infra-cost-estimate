@@ -156,23 +156,34 @@ export function CostPanel() {
           </button>
         </div>
         <div className="space-y-1">
-          {/* Big total = recurring + dev */}
           <div className="text-2xl font-bold text-gray-900 leading-tight">
-            {fmtTHB((totalInfra + totalExternal + totalAddRecurring + totalSubs + totalApiLine) * exchangeRate)}
+            {fmtTHB(totalMonthly * exchangeRate)}
           </div>
-          {/* Two lines: recurring vs dev */}
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-gray-400">🏗 Recurring /mo</span>
-            <span className="font-semibold text-orange-500">
-              {fmtTHB((totalInfra + totalExternal + totalAddRecurring + totalSubs) * exchangeRate)}
-            </span>
-          </div>
-          {totalApiLine > 0 && (
+          {/* Per-group subtotals */}
+          {groupBreakdowns.map(g => (
+            <div key={g.id} className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-400 truncate max-w-[150px]">{g.label}</span>
+              <span className="font-semibold text-gray-700 shrink-0">{fmtTHB(g.total * exchangeRate)}</span>
+            </div>
+          ))}
+          {ungroupedNodes.length > 0 && (
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-gray-400">🔗 Dev cost</span>
-              <span className="font-semibold text-sky-500">
-                {fmtTHB(totalApiLine * exchangeRate)}
+              <span className="text-gray-400">Ungrouped</span>
+              <span className="font-semibold text-gray-700">
+                {fmtTHB(ungroupedNodes.reduce((s, n) => s + n.monthly, 0) * exchangeRate)}
               </span>
+            </div>
+          )}
+          {totalAddRecurring > 0 && (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-400">Additional</span>
+              <span className="font-semibold text-gray-700">{fmtTHB(totalAddRecurring * exchangeRate)}</span>
+            </div>
+          )}
+          {totalSubs > 0 && (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-400">Subscriptions</span>
+              <span className="font-semibold text-gray-700">{fmtTHB(totalSubs * exchangeRate)}</span>
             </div>
           )}
         </div>
@@ -461,15 +472,11 @@ export function CostPanel() {
             {/* Footer */}
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Monthly (THB)</span>
+                <span className="text-gray-500">Total (THB)</span>
                 <span className="font-semibold text-gray-800">{fmtTHB(totalMonthly * exchangeRate)}</span>
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Yearly (THB)</span>
-                <span className="font-semibold text-gray-800">{fmtTHB(totalMonthly * 12 * exchangeRate)}</span>
-              </div>
               <div className="flex justify-between text-xs text-gray-400">
-                <span>Monthly (USD)</span>
+                <span>Total (USD)</span>
                 <span>{fmtUSD(totalMonthly)}</span>
               </div>
               {totalOneTime > 0 && (
