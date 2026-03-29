@@ -25,6 +25,7 @@ interface CanvasState {
   subscriptions: SubscriptionItem[];
   sellingPriceUSD: number;
   year2SellingPriceUSD: number;
+  monthlyChargeUSD: number;
 
   // Canvas actions
   loadDiagram: (diagram: Diagram) => void;
@@ -61,6 +62,7 @@ interface CanvasState {
 
   setSellingPrice: (usd: number) => void;
   setYear2SellingPrice: (usd: number) => void;
+  setMonthlyCharge: (usd: number) => void;
 
   exchangeRate: number;
   setExchangeRate: (rate: number) => void;
@@ -82,6 +84,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   subscriptions: [],
   sellingPriceUSD: 0,
   year2SellingPriceUSD: 0,
+  monthlyChargeUSD: 0,
   exchangeRate: 35,
   setExchangeRate: (exchangeRate) => set({ exchangeRate }),
   departmentRates: loadGlobalSettings().departmentRates,
@@ -99,6 +102,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       subscriptions:   diagram.subscriptions ?? [],
       sellingPriceUSD:      diagram.sellingPriceUSD      ?? 0,
       year2SellingPriceUSD: diagram.year2SellingPriceUSD ?? 0,
+      monthlyChargeUSD:     diagram.monthlyChargeUSD     ?? 0,
     });
     // Load department rates: canvas-specific override > diagram saved rates > global default
     const canvasOverride = diagram.id ? loadCanvasSettings(diagram.id) : null;
@@ -259,6 +263,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setSellingPrice:      (sellingPriceUSD)      => set({ sellingPriceUSD }),
   setYear2SellingPrice: (year2SellingPriceUSD) => set({ year2SellingPriceUSD }),
+  setMonthlyCharge:     (monthlyChargeUSD)     => set({ monthlyChargeUSD }),
 
   setDepartmentRates: (departmentRates) => set({ departmentRates }),
 }));

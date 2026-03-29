@@ -23,6 +23,7 @@ const DiagramBody = z.object({
   subscriptions: z.array(z.any()).default([]),
   sellingPriceUSD:      z.number().default(0),
   year2SellingPriceUSD: z.number().default(0),
+  monthlyChargeUSD:     z.number().default(0),
 });
 
 // GET /api/diagrams
@@ -64,6 +65,7 @@ app.patch("/:id/canvas", async (c) => {
     subscriptions:   body.subscriptions,
     sellingPriceUSD:      body.sellingPriceUSD,
     year2SellingPriceUSD: body.year2SellingPriceUSD,
+    monthlyChargeUSD:     body.monthlyChargeUSD,
   });
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ data: updated });

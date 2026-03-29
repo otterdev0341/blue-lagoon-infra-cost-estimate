@@ -137,6 +137,7 @@ export interface Diagram {
   subscriptions?: unknown[];
   sellingPriceUSD?: number;
   year2SellingPriceUSD?: number;
+  monthlyChargeUSD?: number;
   isTemplate?: boolean;
   createdAt: string;
   updatedAt: string;

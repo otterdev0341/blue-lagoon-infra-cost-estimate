@@ -23,6 +23,7 @@ function docToDiagram(doc: any): Diagram {
     subscriptions:   doc.subscriptions ?? [],
     sellingPriceUSD:      doc.sellingPriceUSD      ?? 0,
     year2SellingPriceUSD: doc.year2SellingPriceUSD ?? 0,
+    monthlyChargeUSD:     doc.monthlyChargeUSD     ?? 0,
     isTemplate:      doc.isTemplate ?? false,
     createdAt:       doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt:       doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
@@ -74,6 +75,7 @@ export async function createDiagram(
     subscriptions:   (data as any).subscriptions ?? [],
     sellingPriceUSD:      (data as any).sellingPriceUSD      ?? 0,
     year2SellingPriceUSD: (data as any).year2SellingPriceUSD ?? 0,
+    monthlyChargeUSD:     (data as any).monthlyChargeUSD     ?? 0,
     isTemplate:           data.isTemplate ?? false,
   });
   return docToDiagram(doc);
@@ -105,6 +107,7 @@ export async function updateDiagram(
         subscriptions:   (data as any).subscriptions     ?? (existing as any).subscriptions ?? [],
         sellingPriceUSD:      (data as any).sellingPriceUSD      ?? (existing as any).sellingPriceUSD      ?? 0,
         year2SellingPriceUSD: (data as any).year2SellingPriceUSD ?? (existing as any).year2SellingPriceUSD ?? 0,
+        monthlyChargeUSD:     (data as any).monthlyChargeUSD     ?? (existing as any).monthlyChargeUSD     ?? 0,
         isTemplate:      data.isTemplate                  ?? existing.isTemplate,
       },
     },
@@ -122,6 +125,7 @@ export async function updateDiagramCanvas(
     subscriptions?: unknown[];
     sellingPriceUSD?: number;
     year2SellingPriceUSD?: number;
+    monthlyChargeUSD?: number;
   }
 ): Promise<Diagram | null> {
   const doc = await DiagramModel.findByIdAndUpdate(
@@ -136,6 +140,7 @@ export async function updateDiagramCanvas(
         subscriptions:        data.subscriptions ?? [],
         sellingPriceUSD:      data.sellingPriceUSD      ?? 0,
         year2SellingPriceUSD: data.year2SellingPriceUSD ?? 0,
+        monthlyChargeUSD:     data.monthlyChargeUSD     ?? 0,
       },
     },
     { new: true }

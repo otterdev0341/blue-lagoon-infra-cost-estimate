@@ -10,7 +10,7 @@ export function useAutoSave() {
   const {
     diagramId, nodes, edges, stickyNotes,
     departmentRates, additionalCosts, subscriptions,
-    sellingPriceUSD, year2SellingPriceUSD,
+    sellingPriceUSD, year2SellingPriceUSD, monthlyChargeUSD,
   } = useCanvasStore();
 
   const [status, setStatus] = useState<SaveStatus>("idle");
@@ -23,13 +23,13 @@ export function useAutoSave() {
   const latestRef = useRef({
     diagramId, nodes, edges, stickyNotes,
     departmentRates, additionalCosts, subscriptions,
-    sellingPriceUSD, year2SellingPriceUSD,
+    sellingPriceUSD, year2SellingPriceUSD, monthlyChargeUSD,
   });
   useEffect(() => {
     latestRef.current = {
       diagramId, nodes, edges, stickyNotes,
       departmentRates, additionalCosts, subscriptions,
-      sellingPriceUSD, year2SellingPriceUSD,
+      sellingPriceUSD, year2SellingPriceUSD, monthlyChargeUSD,
     };
   });
 
@@ -42,7 +42,7 @@ export function useAutoSave() {
         api.diagrams.saveCanvas(
           d.diagramId, d.nodes, d.edges, d.stickyNotes,
           d.departmentRates, d.additionalCosts, d.subscriptions,
-          d.sellingPriceUSD, d.year2SellingPriceUSD,
+          d.sellingPriceUSD, d.year2SellingPriceUSD, d.monthlyChargeUSD,
         ).catch(err => console.error("[auto-save unmount]", err));
       }
     };
@@ -69,7 +69,7 @@ export function useAutoSave() {
         await api.diagrams.saveCanvas(
           d.diagramId!, d.nodes, d.edges, d.stickyNotes,
           d.departmentRates, d.additionalCosts, d.subscriptions,
-          d.sellingPriceUSD, d.year2SellingPriceUSD,
+          d.sellingPriceUSD, d.year2SellingPriceUSD, d.monthlyChargeUSD,
         );
         setStatus("saved");
         setLastSaved(new Date());
@@ -81,7 +81,7 @@ export function useAutoSave() {
     }, DEBOUNCE_MS);
 
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [diagramId, nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD]);
+  }, [diagramId, nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD, monthlyChargeUSD]);
 
   return { status, lastSaved };
 }

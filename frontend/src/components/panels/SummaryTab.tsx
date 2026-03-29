@@ -252,6 +252,8 @@ interface ThreeYearProps {
   setSellingPrice:      (v: number) => void;
   year2SellingPriceUSD: number;
   setYear2SellingPrice: (v: number) => void;
+  monthlyChargeUSD:     number;
+  setMonthlyCharge:     (v: number) => void;
   year1Cost:      number;
   year2PlusCost:  number;
   monthlyAnnual:  number;
@@ -265,19 +267,20 @@ interface ThreeYearProps {
 function ThreeYearTable({
   sellingPriceUSD, setSellingPrice,
   year2SellingPriceUSD, setYear2SellingPrice,
+  monthlyChargeUSD, setMonthlyCharge,
   year1Cost, year2PlusCost,
   monthlyAnnual, yearlyPayment, onetimePayment,
   currency, rate, fmt, fmtAlt,
 }: ThreeYearProps) {
-  // Year 1 = project fee + MA (MA applies from Year 1)
-  // Year 2+ = MA / support only
-  const y1Revenue = (sellingPriceUSD + year2SellingPriceUSD) * 12;
-  const y2Revenue = year2SellingPriceUSD * 12;
+  // Year 1 = project fee + MA + monthly billing × 12
+  // Year 2+ = MA + monthly billing × 12 (no project fee)
+  const y1Revenue = (sellingPriceUSD + year2SellingPriceUSD + monthlyChargeUSD) * 12;
+  const y2Revenue = (year2SellingPriceUSD + monthlyChargeUSD) * 12;
 
   const years = [
-    { label: "Year 1", hint: "project fee + MA", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
-    { label: "Year 2", hint: "MA only",           cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
-    { label: "Year 3", hint: "MA only",           cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 1", hint: "project fee + MA + monthly", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
+    { label: "Year 2", hint: "MA + monthly billing",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 3", hint: "MA + monthly billing",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
   ];
 
   return (
@@ -299,6 +302,29 @@ function ThreeYearTable({
           currency={currency} rate={rate} fmtAlt={fmtAlt}
           placeholder={sellingPriceUSD > 0 ? String(currency === "thb" ? Math.round(sellingPriceUSD * 12 * rate) : +(sellingPriceUSD * 12).toFixed(2)) : "0"}
         />
+
+        {/* Monthly service charge — true per-month billing (not /yr) */}
+        <div>
+          <div className="text-xs font-semibold text-gray-600 mb-0.5">Monthly service charge to client</div>
+          <div className="text-[10px] text-gray-400 mb-1">Billed monthly — applied every year</div>
+          <div className="flex items-center gap-2">
+            <span className="text-base text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
+            <input
+              type="number" min={0} step={100}
+              className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-lg font-bold focus:outline-none focus:border-green-400"
+              value={monthlyChargeUSD > 0 ? (currency === "thb" ? Math.round(monthlyChargeUSD * rate) : +monthlyChargeUSD.toFixed(2)) : ""}
+              placeholder="0"
+              onChange={e => {
+                const val = Number(e.target.value);
+                setMonthlyCharge(currency === "thb" ? val / rate : val);
+              }}
+            />
+            <span className="text-sm text-gray-400 whitespace-nowrap">/mo</span>
+          </div>
+          {monthlyChargeUSD > 0 && (
+            <div className="text-[10px] text-gray-400 mt-1 ml-6">{fmtAlt(monthlyChargeUSD * 12)} annually</div>
+          )}
+        </div>
       </div>
 
       {/* 3-year grid */}
@@ -324,6 +350,29 @@ function ThreeYearTable({
                   <span>Revenue /yr</span>
                   <span className="font-medium text-gray-700">{yr.revenue > 0 ? fmt(yr.revenue) : "—"}</span>
                 </div>
+                {/* Revenue breakdown */}
+                {yr.revenue > 0 && (
+                  <div className="space-y-0.5">
+                    {isYear1 && sellingPriceUSD > 0 && (
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>↳ Project fee</span>
+                        <span className="text-amber-500">+{fmt(sellingPriceUSD * 12)}</span>
+                      </div>
+                    )}
+                    {year2SellingPriceUSD > 0 && (
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>↳ MA /yr</span>
+                        <span className="text-indigo-500">+{fmt(year2SellingPriceUSD * 12)}</span>
+                      </div>
+                    )}
+                    {monthlyChargeUSD > 0 && (
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>↳ Monthly billing × 12</span>
+                        <span className="text-green-500">+{fmt(monthlyChargeUSD * 12)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Cost breakdown */}
                 <div className="space-y-0.5">
                   {isYear1 && onetimePayment > 0 && (
@@ -563,6 +612,7 @@ export function SummaryTab({ rate }: { rate: number }) {
     additionalCosts, subscriptions,
     sellingPriceUSD, setSellingPrice,
     year2SellingPriceUSD, setYear2SellingPrice,
+    monthlyChargeUSD, setMonthlyCharge,
   } = useCanvasStore();
 
   const [currency,   setCurrency]   = useState<Currency>("thb");
@@ -643,10 +693,10 @@ export function SummaryTab({ rate }: { rate: number }) {
   const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
   const year2PlusCost = monthlyAnnual + yearlyPayment;
 
-  // Year 1 revenue = project delivery fee + MA (MA applies from Year 1)
-  // Year 2+ revenue = MA / support only (no project fee)
-  const y1Rev = (sellingPriceUSD + year2SellingPriceUSD) * 12;
-  const y2Rev = year2SellingPriceUSD * 12;
+  // Year 1 revenue = project delivery fee + MA + monthly billing × 12
+  // Year 2+ revenue = MA + monthly billing × 12 (no project fee)
+  const y1Rev = (sellingPriceUSD + year2SellingPriceUSD + monthlyChargeUSD) * 12;
+  const y2Rev = (year2SellingPriceUSD + monthlyChargeUSD) * 12;
 
   const monthlySubsList = subscriptions.filter(s => s.billingPeriod === "monthly");
   const yearlySubsList  = subscriptions.filter(s => s.billingPeriod === "yearly");
@@ -714,6 +764,8 @@ export function SummaryTab({ rate }: { rate: number }) {
               setSellingPrice={setSellingPrice}
               year2SellingPriceUSD={year2SellingPriceUSD}
               setYear2SellingPrice={setYear2SellingPrice}
+              monthlyChargeUSD={monthlyChargeUSD}
+              setMonthlyCharge={setMonthlyCharge}
               year1Cost={year1Cost}
               year2PlusCost={year2PlusCost}
               monthlyAnnual={monthlyAnnual}
@@ -1007,18 +1059,42 @@ export function SummaryTab({ rate }: { rate: number }) {
               <div className="text-[10px] text-gray-400">Revenue you receive from client (MA, support contract, etc.)</div>
             </label>
 
+            {/* Monthly service charge */}
+            <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
+              {currency === "thb" ? "Monthly service charge /mo (THB)" : "Monthly service charge /mo (USD)"}
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
+                <input
+                  type="number" min={0} step={100}
+                  className="flex-1 border rounded px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-400"
+                  value={monthlyChargeUSD > 0
+                    ? (currency === "thb"
+                        ? Math.round(monthlyChargeUSD * rate)
+                        : +monthlyChargeUSD.toFixed(2))
+                    : ""}
+                  placeholder="0"
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    setMonthlyCharge(currency === "thb" ? val / rate : val);
+                  }}
+                />
+                <span className="text-xs text-gray-400">/mo</span>
+              </div>
+              <div className="text-[10px] text-gray-400">Monthly billing to client (all years)</div>
+            </label>
+
             {sellingPriceUSD > 0 && (
               <div className="space-y-2 pt-1 border-t border-gray-100">
                 {[
                   {
                     label: "📅 Year 1", cost: year1Cost,
                     revenue: y1Rev,
-                    hint: "project fee + MA", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
+                    hint: "project fee + MA + monthly", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
                   },
                   {
                     label: "📈 Year 2+", cost: year2PlusCost,
                     revenue: y2Rev,
-                    hint: "MA only", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
+                    hint: "MA + monthly billing", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
                   },
                 ].map((yr, i) => {
                   const profit = yr.revenue - yr.cost;

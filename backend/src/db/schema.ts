@@ -20,6 +20,7 @@ export interface IDiagram extends Document {
   subscriptions: unknown[];
   sellingPriceUSD: number;
   year2SellingPriceUSD: number;
+  monthlyChargeUSD: number;
   isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +45,7 @@ const diagramSchema = new Schema<IDiagram>(
     subscriptions:   { type: Schema.Types.Mixed, default: [] },
     sellingPriceUSD:      { type: Number, default: 0 },
     year2SellingPriceUSD: { type: Number, default: 0 },
+    monthlyChargeUSD:     { type: Number, default: 0 },
     isTemplate:           { type: Boolean, default: false },
   },
   {

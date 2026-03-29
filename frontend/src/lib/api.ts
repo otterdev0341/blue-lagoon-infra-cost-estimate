@@ -28,10 +28,11 @@ export const api = {
       subscriptions?: Diagram["subscriptions"],
       sellingPriceUSD?: number,
       year2SellingPriceUSD?: number,
+      monthlyChargeUSD?: number,
     ) =>
       req<Diagram>(`/diagrams/${id}/canvas`, {
         method: "PATCH",
-        body: JSON.stringify({ nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD }),
+        body: JSON.stringify({ nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD, monthlyChargeUSD }),
       }),
     delete: (id: string) => req<{ success: boolean }>(`/diagrams/${id}`, { method: "DELETE" }),
     setTemplate: (id: string, isTemplate: boolean) =>
