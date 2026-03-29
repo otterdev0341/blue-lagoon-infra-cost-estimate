@@ -19,6 +19,10 @@ function docToDiagram(doc: any): Diagram {
     edges:           doc.edges ?? [],
     stickyNotes:     doc.stickyNotes ?? [],
     departmentRates: doc.departmentRates ?? [],
+    additionalCosts: doc.additionalCosts ?? [],
+    subscriptions:   doc.subscriptions ?? [],
+    sellingPriceUSD:      doc.sellingPriceUSD      ?? 0,
+    year2SellingPriceUSD: doc.year2SellingPriceUSD ?? 0,
     isTemplate:      doc.isTemplate ?? false,
     createdAt:       doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt:       doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
@@ -66,7 +70,11 @@ export async function createDiagram(
     edges:           data.edges ?? [],
     stickyNotes:     data.stickyNotes ?? [],
     departmentRates: data.departmentRates ?? [],
-    isTemplate:      data.isTemplate ?? false,
+    additionalCosts: (data as any).additionalCosts ?? [],
+    subscriptions:   (data as any).subscriptions ?? [],
+    sellingPriceUSD:      (data as any).sellingPriceUSD      ?? 0,
+    year2SellingPriceUSD: (data as any).year2SellingPriceUSD ?? 0,
+    isTemplate:           data.isTemplate ?? false,
   });
   return docToDiagram(doc);
 }
@@ -89,11 +97,15 @@ export async function updateDiagram(
         description:     data.description     ?? existing.description,
         region:          data.region          ?? existing.region,
         billingModel:    data.billingModel     ?? existing.billingModel,
-        nodes:           data.nodes           ?? existing.nodes,
-        edges:           data.edges           ?? existing.edges,
-        stickyNotes:     data.stickyNotes     ?? existing.stickyNotes,
-        departmentRates: data.departmentRates ?? existing.departmentRates,
-        isTemplate:      data.isTemplate      ?? existing.isTemplate,
+        nodes:           data.nodes                       ?? existing.nodes,
+        edges:           data.edges                       ?? existing.edges,
+        stickyNotes:     data.stickyNotes                 ?? existing.stickyNotes,
+        departmentRates: data.departmentRates             ?? existing.departmentRates,
+        additionalCosts: (data as any).additionalCosts   ?? (existing as any).additionalCosts ?? [],
+        subscriptions:   (data as any).subscriptions     ?? (existing as any).subscriptions ?? [],
+        sellingPriceUSD:      (data as any).sellingPriceUSD      ?? (existing as any).sellingPriceUSD      ?? 0,
+        year2SellingPriceUSD: (data as any).year2SellingPriceUSD ?? (existing as any).year2SellingPriceUSD ?? 0,
+        isTemplate:      data.isTemplate                  ?? existing.isTemplate,
       },
     },
     { new: true }
@@ -104,16 +116,26 @@ export async function updateDiagram(
 /** Lightweight canvas update — no snapshot (used by auto-save). */
 export async function updateDiagramCanvas(
   id: string,
-  data: Pick<Diagram, "nodes" | "edges" | "stickyNotes"> & { departmentRates?: Diagram["departmentRates"] }
+  data: Pick<Diagram, "nodes" | "edges" | "stickyNotes"> & {
+    departmentRates?: Diagram["departmentRates"];
+    additionalCosts?: unknown[];
+    subscriptions?: unknown[];
+    sellingPriceUSD?: number;
+    year2SellingPriceUSD?: number;
+  }
 ): Promise<Diagram | null> {
   const doc = await DiagramModel.findByIdAndUpdate(
     id,
     {
       $set: {
-        nodes:           data.nodes,
-        edges:           data.edges,
-        stickyNotes:     data.stickyNotes,
-        departmentRates: data.departmentRates ?? [],
+        nodes:                data.nodes,
+        edges:                data.edges,
+        stickyNotes:          data.stickyNotes,
+        departmentRates:      data.departmentRates ?? [],
+        additionalCosts:      data.additionalCosts ?? [],
+        subscriptions:        data.subscriptions ?? [],
+        sellingPriceUSD:      data.sellingPriceUSD      ?? 0,
+        year2SellingPriceUSD: data.year2SellingPriceUSD ?? 0,
       },
     },
     { new: true }

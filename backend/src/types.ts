@@ -133,6 +133,10 @@ export interface Diagram {
   edges: CanvasEdge[];
   stickyNotes: StickyNote[];
   departmentRates?: { id: string; name: string; ratePerManday: number; color: string }[];
+  additionalCosts?: unknown[];
+  subscriptions?: unknown[];
+  sellingPriceUSD?: number;
+  year2SellingPriceUSD?: number;
   isTemplate?: boolean;
   createdAt: string;
   updatedAt: string;

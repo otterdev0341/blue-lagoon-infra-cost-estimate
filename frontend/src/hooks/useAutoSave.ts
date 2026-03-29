@@ -7,7 +7,12 @@ const DEBOUNCE_MS = 2500; // 2.5s after last change
 export type SaveStatus = "idle" | "unsaved" | "saving" | "saved" | "error";
 
 export function useAutoSave() {
-  const { diagramId, nodes, edges, stickyNotes, departmentRates } = useCanvasStore();
+  const {
+    diagramId, nodes, edges, stickyNotes,
+    departmentRates, additionalCosts, subscriptions,
+    sellingPriceUSD, year2SellingPriceUSD,
+  } = useCanvasStore();
+
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -28,7 +33,11 @@ export function useAutoSave() {
     timer.current = setTimeout(async () => {
       setStatus("saving");
       try {
-        await api.diagrams.saveCanvas(diagramId, nodes, edges, stickyNotes, departmentRates);
+        await api.diagrams.saveCanvas(
+          diagramId, nodes, edges, stickyNotes,
+          departmentRates, additionalCosts, subscriptions,
+          sellingPriceUSD, year2SellingPriceUSD,
+        );
         setStatus("saved");
         setLastSaved(new Date());
         // Return to idle after a few seconds so the indicator fades
@@ -40,7 +49,7 @@ export function useAutoSave() {
     }, DEBOUNCE_MS);
 
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [diagramId, nodes, edges, stickyNotes, departmentRates]);
+  }, [diagramId, nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD]);
 
   return { status, lastSaved };
 }

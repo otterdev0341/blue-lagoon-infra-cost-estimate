@@ -24,6 +24,7 @@ interface CanvasState {
   additionalCosts: AdditionalCostItem[];
   subscriptions: SubscriptionItem[];
   sellingPriceUSD: number;
+  year2SellingPriceUSD: number;
 
   // Canvas actions
   loadDiagram: (diagram: Diagram) => void;
@@ -59,6 +60,7 @@ interface CanvasState {
   deleteSubscription: (id: string) => void;
 
   setSellingPrice: (usd: number) => void;
+  setYear2SellingPrice: (usd: number) => void;
 
   exchangeRate: number;
   setExchangeRate: (rate: number) => void;
@@ -79,19 +81,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   additionalCosts: [],
   subscriptions: [],
   sellingPriceUSD: 0,
+  year2SellingPriceUSD: 0,
   exchangeRate: 35,
   setExchangeRate: (exchangeRate) => set({ exchangeRate }),
   departmentRates: loadGlobalSettings().departmentRates,
 
   loadDiagram: (diagram) => {
     set({
-      diagramId: diagram.id,
-      diagramName: diagram.name,
-      defaultRegion: diagram.region,
-      billingModel: diagram.billingModel,
-      nodes: diagram.nodes,
-      edges: diagram.edges,
-      stickyNotes: diagram.stickyNotes,
+      diagramId:      diagram.id,
+      diagramName:    diagram.name,
+      defaultRegion:  diagram.region,
+      billingModel:   diagram.billingModel,
+      nodes:          diagram.nodes,
+      edges:          diagram.edges,
+      stickyNotes:    diagram.stickyNotes,
+      additionalCosts: diagram.additionalCosts ?? [],
+      subscriptions:   diagram.subscriptions ?? [],
+      sellingPriceUSD:      diagram.sellingPriceUSD      ?? 0,
+      year2SellingPriceUSD: diagram.year2SellingPriceUSD ?? 0,
     });
     // Load department rates: canvas-specific override > diagram saved rates > global default
     const canvasOverride = diagram.id ? loadCanvasSettings(diagram.id) : null;
@@ -250,7 +257,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteSubscription: (id) =>
     set((s) => ({ subscriptions: s.subscriptions.filter((c) => c.id !== id) })),
 
-  setSellingPrice: (sellingPriceUSD) => set({ sellingPriceUSD }),
+  setSellingPrice:      (sellingPriceUSD)      => set({ sellingPriceUSD }),
+  setYear2SellingPrice: (year2SellingPriceUSD) => set({ year2SellingPriceUSD }),
 
   setDepartmentRates: (departmentRates) => set({ departmentRates }),
 }));

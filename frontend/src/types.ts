@@ -271,6 +271,7 @@ export interface Diagram {
   additionalCosts?: AdditionalCostItem[];
   subscriptions?: SubscriptionItem[];
   sellingPriceUSD?: number;
+  year2SellingPriceUSD?: number;
   isTemplate?: boolean;
   createdAt: string;
   updatedAt: string;

@@ -16,6 +16,10 @@ export interface IDiagram extends Document {
   edges: unknown[];
   stickyNotes: unknown[];
   departmentRates: unknown[];
+  additionalCosts: unknown[];
+  subscriptions: unknown[];
+  sellingPriceUSD: number;
+  year2SellingPriceUSD: number;
   isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +40,11 @@ const diagramSchema = new Schema<IDiagram>(
     edges:           { type: Schema.Types.Mixed, default: [] },
     stickyNotes:     { type: Schema.Types.Mixed, default: [] },
     departmentRates: { type: Schema.Types.Mixed, default: [] },
-    isTemplate:      { type: Boolean, default: false },
+    additionalCosts: { type: Schema.Types.Mixed, default: [] },
+    subscriptions:   { type: Schema.Types.Mixed, default: [] },
+    sellingPriceUSD:      { type: Number, default: 0 },
+    year2SellingPriceUSD: { type: Number, default: 0 },
+    isTemplate:           { type: Boolean, default: false },
   },
   {
     timestamps: true,         // auto-manages createdAt / updatedAt

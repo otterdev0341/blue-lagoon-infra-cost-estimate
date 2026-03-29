@@ -18,8 +18,21 @@ export const api = {
     get: (id: string) => req<Diagram>(`/diagrams/${id}`),
     create: (body: Partial<Diagram>) => req<Diagram>("/diagrams", { method: "POST", body: JSON.stringify(body) }),
     update: (id: string, body: Partial<Diagram>) => req<Diagram>(`/diagrams/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-    saveCanvas: (id: string, nodes: Diagram["nodes"], edges: Diagram["edges"], stickyNotes: Diagram["stickyNotes"], departmentRates?: Diagram["departmentRates"]) =>
-      req<Diagram>(`/diagrams/${id}/canvas`, { method: "PATCH", body: JSON.stringify({ nodes, edges, stickyNotes, departmentRates }) }),
+    saveCanvas: (
+      id: string,
+      nodes: Diagram["nodes"],
+      edges: Diagram["edges"],
+      stickyNotes: Diagram["stickyNotes"],
+      departmentRates?: Diagram["departmentRates"],
+      additionalCosts?: Diagram["additionalCosts"],
+      subscriptions?: Diagram["subscriptions"],
+      sellingPriceUSD?: number,
+      year2SellingPriceUSD?: number,
+    ) =>
+      req<Diagram>(`/diagrams/${id}/canvas`, {
+        method: "PATCH",
+        body: JSON.stringify({ nodes, edges, stickyNotes, departmentRates, additionalCosts, subscriptions, sellingPriceUSD, year2SellingPriceUSD }),
+      }),
     delete: (id: string) => req<{ success: boolean }>(`/diagrams/${id}`, { method: "DELETE" }),
     setTemplate: (id: string, isTemplate: boolean) =>
       req<Diagram>(`/diagrams/${id}/template`, { method: "PATCH", body: JSON.stringify({ isTemplate }) }),

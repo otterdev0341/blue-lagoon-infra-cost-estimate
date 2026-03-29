@@ -19,6 +19,10 @@ const DiagramBody = z.object({
   edges: z.array(z.any()).default([]),
   stickyNotes: z.array(z.any()).default([]),
   departmentRates: z.array(z.any()).default([]),
+  additionalCosts: z.array(z.any()).default([]),
+  subscriptions: z.array(z.any()).default([]),
+  sellingPriceUSD:      z.number().default(0),
+  year2SellingPriceUSD: z.number().default(0),
 });
 
 // GET /api/diagrams
@@ -52,10 +56,14 @@ app.put("/:id", zValidator("json", DiagramBody.partial()), async (c) => {
 app.patch("/:id/canvas", async (c) => {
   const body = await c.req.json();
   const updated = await updateDiagramCanvas(c.req.param("id"), {
-    nodes: body.nodes,
-    edges: body.edges,
-    stickyNotes: body.stickyNotes,
+    nodes:           body.nodes,
+    edges:           body.edges,
+    stickyNotes:     body.stickyNotes,
     departmentRates: body.departmentRates,
+    additionalCosts: body.additionalCosts,
+    subscriptions:   body.subscriptions,
+    sellingPriceUSD:      body.sellingPriceUSD,
+    year2SellingPriceUSD: body.year2SellingPriceUSD,
   });
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ data: updated });
