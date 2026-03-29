@@ -30,6 +30,7 @@ export interface EC2Config {
   ebsVolumeGb: number;
   ebsType: "gp3" | "gp2" | "io1" | "st1" | "sc1";
   autoScaling?: AutoScalingConfig;
+  description?: string;
 }
 
 export interface S3Config {
@@ -38,6 +39,7 @@ export interface S3Config {
   getRequests: number;
   putRequests: number;
   dataTransferOutGb: number;
+  description?: string;
 }
 
 export interface RDSConfig {
@@ -47,18 +49,21 @@ export interface RDSConfig {
   storageGb: number;
   storageType: "gp2" | "gp3" | "io1";
   autoScaling?: AutoScalingConfig;
+  description?: string;
 }
 
 export interface LambdaConfig {
   invocationsPerMonth: number;
   avgDurationMs: number;
   memorySizeMb: number;
+  description?: string;
 }
 
 export interface VPCConfig {
   natGatewayCount: number;
   natDataProcessedGb: number;
   vpnConnectionCount: number;
+  description?: string;
 }
 
 export interface ALBConfig {
@@ -66,12 +71,14 @@ export interface ALBConfig {
   newConnectionsPerSec: number;
   activeConnections: number;
   ruleLookups: number;
+  description?: string;
 }
 
 export interface CloudFrontConfig {
   dataTransferOutGb: number;
   httpRequestsMillions: number;
   httpsRequestsMillions: number;
+  description?: string;
 }
 
 export interface StickyNoteConfig {
@@ -104,29 +111,34 @@ export interface BedrockConfig {
   model: BedrockModel;
   inputTokensK: number;   // thousands per month
   outputTokensK: number;  // thousands per month
+  description?: string;
 }
 
 export interface EBSConfig {
   volumeType: "gp3" | "gp2" | "io1" | "io2" | "st1" | "sc1";
   sizeGb: number;
   provisionedIops?: number;  // for io1/io2
+  description?: string;
 }
 
 export type LightsailPlan = "nano" | "micro" | "small" | "medium" | "large" | "xlarge" | "2xlarge";
 
 export interface LightsailConfig {
   plan: LightsailPlan;
+  description?: string;
 }
 
 export interface CognitoConfig {
   mauCount: number;
   advancedSecurity: boolean;
+  description?: string;
 }
 
 export interface Route53Config {
   hostedZoneCount: number;
   queriesMillions: number;
   healthCheckCount: number;
+  description?: string;
 }
 
 export interface DynamoDBConfig {
@@ -136,6 +148,7 @@ export interface DynamoDBConfig {
   readRequestMillions: number;
   writeRequestMillions: number;
   storageGb: number;
+  description?: string;
 }
 
 export type RedshiftNodeType = "dc2.large" | "dc2.8xlarge" | "ra3.xlplus" | "ra3.4xlarge" | "ra3.16xlarge";
@@ -144,6 +157,7 @@ export interface RedshiftConfig {
   nodeType: RedshiftNodeType;
   nodeCount: number;
   utilizationHours: number;
+  description?: string;
 }
 
 export type GroupType = "infrastructure" | "external" | "implementation" | "custom" | "generic" | "line" | "api";

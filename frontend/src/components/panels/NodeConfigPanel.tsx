@@ -400,6 +400,19 @@ export function NodeConfigPanel({ nodeId, onClose }: Props) {
         />
       )}
 
+      {/* Description — for all AWS nodes and non-group/sticky nodes */}
+      {!isGroup && node.type !== "sticky_note" && (
+        field("Description",
+          <textarea
+            rows={2}
+            placeholder="Add a description…"
+            className="border rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+            value={(cfg.description as string) ?? ""}
+            onChange={(e) => updateNodeConfig(nodeId, { description: e.target.value } as any)}
+          />
+        )
+      )}
+
       {/* Region/AZ — not for groups */}
       {!isGroup && (<>
         {field("Region",
