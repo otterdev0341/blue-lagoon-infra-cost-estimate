@@ -265,14 +265,15 @@ function ThreeYearTable({
   year1Cost, year2PlusCost,
   currency, rate, fmt, fmtAlt,
 }: ThreeYearProps) {
-  // Year 2+ revenue falls back to Year 1 selling price if not set
-  const y1Revenue = sellingPriceUSD * 12;
-  const y2Revenue = (year2SellingPriceUSD > 0 ? year2SellingPriceUSD : sellingPriceUSD) * 12;
+  // Year 1 = project fee + MA (MA applies from Year 1)
+  // Year 2+ = MA / support only
+  const y1Revenue = (sellingPriceUSD + year2SellingPriceUSD) * 12;
+  const y2Revenue = year2SellingPriceUSD * 12;
 
   const years = [
-    { label: "Year 1", hint: "incl. one-time",  cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
-    { label: "Year 2", hint: "MA + recurring",   cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
-    { label: "Year 3", hint: "MA + recurring",   cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 1", hint: "project fee + MA", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
+    { label: "Year 2", hint: "MA only",           cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 3", hint: "MA only",           cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
   ];
 
   return (
@@ -280,15 +281,15 @@ function ThreeYearTable({
       {/* Selling price inputs */}
       <div className="space-y-4">
         <PriceInput
-          label="Year 1 — Selling price to client"
-          hint="Project delivery fee (includes setup & dev)"
+          label="Project fee (one-time, Year 1 only)"
+          hint="One-time delivery / implementation fee charged in Year 1"
           value={sellingPriceUSD}
           onChange={setSellingPrice}
           currency={currency} rate={rate} fmtAlt={fmtAlt}
         />
         <PriceInput
-          label="Year 2+ — Annual charge (MA / support)"
-          hint="Maintenance agreement or support fee charged yearly"
+          label="MA / support revenue (all years)"
+          hint="Annual revenue from client — applies from Year 1 onwards (maintenance, support)"
           value={year2SellingPriceUSD}
           onChange={setYear2SellingPrice}
           currency={currency} rate={rate} fmtAlt={fmtAlt}
@@ -353,7 +354,7 @@ function ThreeYearTable({
       </div>
 
       {/* 3-year total summary */}
-      {(y1Revenue > 0 || y2Revenue > 0) && (
+      {(y1Revenue > 0 || y2Revenue > 0 || sellingPriceUSD > 0) && (
         <div className="rounded-xl bg-slate-800 text-white p-4 space-y-2">
           <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">3-Year Summary</div>
           <div className="flex justify-between text-xs text-slate-400">
@@ -615,8 +616,10 @@ export function SummaryTab({ rate }: { rate: number }) {
   const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
   const year2PlusCost = monthlyAnnual + yearlyPayment;
 
-  // Revenue per year (Year 2+ falls back to Year 1 price if MA not set)
-  const y2Rev = (year2SellingPriceUSD > 0 ? year2SellingPriceUSD : sellingPriceUSD) * 12;
+  // Year 1 revenue = project delivery fee + MA (MA applies from Year 1)
+  // Year 2+ revenue = MA / support only (no project fee)
+  const y1Rev = (sellingPriceUSD + year2SellingPriceUSD) * 12;
+  const y2Rev = year2SellingPriceUSD * 12;
 
   const monthlySubsList = subscriptions.filter(s => s.billingPeriod === "monthly");
   const yearlySubsList  = subscriptions.filter(s => s.billingPeriod === "yearly");
@@ -927,9 +930,9 @@ export function SummaryTab({ rate }: { rate: number }) {
           </div>
           <div className="px-3 py-3 space-y-3">
 
-            {/* Year 1 selling price */}
+            {/* Year 1 project fee */}
             <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
-              {currency === "thb" ? "Year 1 selling price /yr (THB)" : "Year 1 selling price /yr (USD)"}
+              {currency === "thb" ? "Project fee — Year 1 only (THB)" : "Project fee — Year 1 only (USD)"}
               <div className="flex items-center gap-1.5">
                 <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
                 <input
@@ -950,9 +953,9 @@ export function SummaryTab({ rate }: { rate: number }) {
               </div>
             </label>
 
-            {/* Year 2+ selling price (MA fee) */}
+            {/* MA / support revenue — all years */}
             <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
-              {currency === "thb" ? "Year 2+ MA / support fee /yr (THB)" : "Year 2+ MA / support fee /yr (USD)"}
+              {currency === "thb" ? "MA / support revenue /yr (THB)" : "MA / support revenue /yr (USD)"}
               <div className="flex items-center gap-1.5">
                 <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
                 <input
@@ -971,7 +974,7 @@ export function SummaryTab({ rate }: { rate: number }) {
                 />
                 <span className="text-xs text-gray-400">/yr</span>
               </div>
-              <div className="text-[10px] text-gray-400">Revenue from client from Year 2 (MA, support, etc.)</div>
+              <div className="text-[10px] text-gray-400">Revenue you receive from client (MA, support contract, etc.)</div>
             </label>
 
             {sellingPriceUSD > 0 && (
@@ -979,13 +982,13 @@ export function SummaryTab({ rate }: { rate: number }) {
                 {[
                   {
                     label: "📅 Year 1", cost: year1Cost,
-                    revenue: sellingPriceUSD * 12,
-                    hint: "incl. one-time", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
+                    revenue: y1Rev,
+                    hint: "project fee + MA", border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8",
                   },
                   {
                     label: "📈 Year 2+", cost: year2PlusCost,
                     revenue: y2Rev,
-                    hint: "MA + recurring", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
+                    hint: "MA only", border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D",
                   },
                 ].map((yr, i) => {
                   const profit = yr.revenue - yr.cost;
