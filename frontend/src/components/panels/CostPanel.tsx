@@ -8,7 +8,7 @@ import { AdditionalCostsTab } from "./AdditionalCostsTab.tsx";
 import { SubscribeTab } from "./SubscribeTab.tsx";
 import { SummaryTab } from "./SummaryTab.tsx";
 import { subMonthly } from "./SubscribeTab.tsx";
-import type { BillingModel, AdditionalCostItem } from "../../types.ts";
+import type { BillingModel, AdditionalCostItem, GroupBillingType } from "../../types.ts";
 
 type Tab = "breakdown" | "additional" | "subscribe" | "summary";
 
@@ -106,9 +106,11 @@ export function CostPanel() {
         const nd = nodes.find(x => x.id === n.nodeId);
         return nd?.parentId === g.id;
       });
+      const billingType: GroupBillingType = (g.data.config as any)?.billingType ?? "monthly";
       return {
         id: g.id,
         label: g.data.label,
+        billingType,
         total: services.reduce((s, n) => s + n.monthly, 0),
         services,
       };
@@ -160,12 +162,22 @@ export function CostPanel() {
             {fmtTHB(totalMonthly * exchangeRate)}
           </div>
           {/* Per-group subtotals */}
-          {groupBreakdowns.map(g => (
-            <div key={g.id} className="flex items-center justify-between text-[11px]">
-              <span className="text-gray-400 truncate max-w-[150px]">{g.label}</span>
-              <span className="font-semibold text-gray-700 shrink-0">{fmtTHB(g.total * exchangeRate)}</span>
-            </div>
-          ))}
+          {groupBreakdowns.map(g => {
+            const billingColor = g.billingType === "onetime" ? "#F59E0B" : g.billingType === "yearly" ? "#6366F1" : "#3B82F6";
+            const billingLabel = g.billingType === "onetime" ? "one-time" : g.billingType === "yearly" ? "yearly" : "monthly";
+            return (
+              <div key={g.id} className="flex items-center justify-between text-[11px] gap-1">
+                <span className="text-gray-400 truncate">{g.label}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full"
+                    style={{ background: billingColor + "20", color: billingColor }}>
+                    {billingLabel}
+                  </span>
+                  <span className="font-semibold text-gray-700">{fmtTHB(g.total * exchangeRate)}</span>
+                </div>
+              </div>
+            );
+          })}
           {ungroupedNodes.length > 0 && (
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-gray-400">Ungrouped</span>

@@ -148,10 +148,13 @@ export interface RedshiftConfig {
 
 export type GroupType = "infrastructure" | "external" | "implementation" | "custom" | "generic" | "line" | "api";
 
+export type GroupBillingType = "monthly" | "yearly" | "onetime";
+
 export interface GroupConfig {
   groupType: GroupType;
-  setupCostUSD?: number;  // one-time cost
-  bgColor?: string;       // custom background color override
+  billingType?: GroupBillingType; // how the group's cost is billed
+  setupCostUSD?: number;          // one-time cost (legacy)
+  bgColor?: string;               // custom background color override
 }
 
 export interface TextboxConfig {

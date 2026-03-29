@@ -3,7 +3,7 @@ import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { Pencil, Trash2, Check, Palette } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
-import type { GroupConfig, GroupType } from "../../types.ts";
+import type { GroupConfig, GroupType, GroupBillingType } from "../../types.ts";
 
 const PASTEL_COLORS = [
   { label: "Default",     value: null },
@@ -41,6 +41,18 @@ const GROUP_TYPE_LABELS: Record<GroupType, string> = {
 
 const ALL_GROUP_TYPES: GroupType[] = ["infrastructure", "external", "implementation", "generic", "line", "api", "custom"];
 
+const BILLING_LABELS: Record<GroupBillingType, string> = {
+  monthly: "Monthly",
+  yearly:  "Yearly",
+  onetime: "One-time",
+};
+const BILLING_COLORS: Record<GroupBillingType, string> = {
+  monthly: "#3B82F6",
+  yearly:  "#6366F1",
+  onetime: "#F59E0B",
+};
+const ALL_BILLING_TYPES: GroupBillingType[] = ["monthly", "yearly", "onetime"];
+
 interface GroupNodeData {
   label: string;
   config: GroupConfig;
@@ -60,7 +72,10 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
   const [labelDraft, setLabelDraft] = useState(d.label);
   const [showPalette, setShowPalette] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [showBillingMenu, setShowBillingMenu] = useState(false);
   const paletteRef = useRef<HTMLDivElement>(null);
+
+  const billingType: GroupBillingType = cfg.billingType ?? "monthly";
 
   const commitLabel = () => {
     updateNodeMeta(id, { label: labelDraft });
@@ -138,6 +153,44 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
                         style={{ background: GROUP_STYLES[t].border }}
                       />
                       {GROUP_TYPE_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Billing type picker ── */}
+            <div className="relative nodrag">
+              <button
+                title="Change billing type"
+                onClick={() => setShowBillingMenu(v => !v)}
+                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full hover:opacity-90 transition-opacity"
+                style={{
+                  background: BILLING_COLORS[billingType] + "30",
+                  color: BILLING_COLORS[billingType],
+                  border: `1px solid ${BILLING_COLORS[billingType]}60`,
+                }}
+              >
+                {BILLING_LABELS[billingType]}
+              </button>
+              {showBillingMenu && (
+                <div
+                  className="absolute left-0 top-6 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
+                  style={{ minWidth: 100, zIndex: 50 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {ALL_BILLING_TYPES.map((bt) => (
+                    <button
+                      key={bt}
+                      onClick={() => {
+                        updateNodeConfig(id, { ...cfg, billingType: bt });
+                        setShowBillingMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      style={{ color: bt === billingType ? BILLING_COLORS[bt] : "#374151", fontWeight: bt === billingType ? 600 : 400 }}
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: BILLING_COLORS[bt] }} />
+                      {BILLING_LABELS[bt]}
                     </button>
                   ))}
                 </div>

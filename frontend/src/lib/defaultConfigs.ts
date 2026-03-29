@@ -98,6 +98,7 @@ export const DEFAULT_CONFIGS: Record<AWSServiceType, NodeConfig> = {
   },
   group: {
     groupType: "line",
+    billingType: "monthly",
     setupCostUSD: 0,
   },
   textbox:  { content: "", bgColor: "#FFFFFF" },

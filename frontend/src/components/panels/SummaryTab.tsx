@@ -4,7 +4,7 @@ import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
 import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
 import { subMonthly } from "./SubscribeTab.tsx";
-import type { AdditionalCostItem } from "../../types.ts";
+import type { AdditionalCostItem, GroupBillingType } from "../../types.ts";
 
 type Period   = "monthly" | "yearly";
 type Currency = "thb" | "usd";
@@ -20,6 +20,17 @@ function oneTimeAmount(item: AdditionalCostItem): number {
   if (item.billingPeriod !== "one-time") return 0;
   return item.amountUSD * (1 - (item.discount ?? 0) / 100);
 }
+
+const BILLING_COLORS: Record<GroupBillingType, string> = {
+  monthly: "#3B82F6",
+  yearly:  "#6366F1",
+  onetime: "#F59E0B",
+};
+const BILLING_LABELS: Record<GroupBillingType, string> = {
+  monthly: "Monthly",
+  yearly:  "Yearly",
+  onetime: "One-time",
+};
 
 const API_LINE_TYPES = new Set([
   "api_rest","api_grpc","api_mcp",
@@ -89,7 +100,7 @@ function Row({ icon, title, subtitle, primary, secondary, color, badge, items }:
 // ── Grand total card (extracted to avoid IIFE useState) ─────────────────────
 
 interface GrandTotalProps {
-  groups:          { id: string; label: string; total: number }[];
+  groups:          { id: string; label: string; total: number; billingType: GroupBillingType }[];
   ungroupedUSD:    number;
   dataTransferUSD: number;
   addUSD:          number;
@@ -107,9 +118,22 @@ function GrandTotalCard({
   f, periodLabel, fmt, fmtAlt,
 }: GrandTotalProps) {
   const [open, setOpen] = useState(true);
-  const totalUSD =
-    groups.reduce((s, g) => s + g.total, 0) +
-    ungroupedUSD + dataTransferUSD + addUSD + subsUSD + devUSD;
+
+  const recurringGroups = groups.filter(g => g.billingType === "monthly");
+  const yearlyGroups    = groups.filter(g => g.billingType === "yearly");
+  const onetimeGroups   = groups.filter(g => g.billingType === "onetime");
+
+  // Recurring total: monthly groups + ungrouped + data transfer + additional + subs
+  const recurringUSD =
+    recurringGroups.reduce((s, g) => s + g.total, 0) +
+    ungroupedUSD + dataTransferUSD + addUSD + subsUSD;
+  // Yearly groups: full cost per year (not amortised)
+  const yearlyGroupsUSD = yearlyGroups.reduce((s, g) => s + g.total * 12, 0);
+  // One-time: onetime groups + dev + legacy one-time
+  const onetimeTotal = onetimeGroups.reduce((s, g) => s + g.total, 0) + devUSD + oneTimeTotal;
+
+  // Display total per period: recurring*f + (yearly shown as /yr always) + onetime (flat)
+  const recurringDisplay = recurringUSD * f;
 
   return (
     <div className="rounded-xl bg-gray-900 text-white overflow-hidden">
@@ -121,7 +145,7 @@ function GrandTotalCard({
           <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Cost Summary</div>
           {!open && (
             <div className="text-lg font-bold text-white leading-tight whitespace-nowrap mt-0.5">
-              {fmt(totalUSD * f)}
+              {fmt(recurringDisplay)}
             </div>
           )}
         </div>
@@ -131,20 +155,23 @@ function GrandTotalCard({
       </button>
 
       {open && (
-        <div className="px-4 pb-3 space-y-1.5 border-t border-white/10">
-          {/* One line per group */}
-          {groups.map((g, i) => (
-            <div key={g.id} className={`flex items-center gap-2 ${i === 0 ? "pt-2" : ""}`}>
+        <div className="px-4 pb-3 space-y-1.5 border-t border-white/10 pt-2">
+
+          {/* Monthly groups */}
+          {recurringGroups.map(g => (
+            <div key={g.id} className="flex items-center gap-2">
               <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
-              <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">
+              <span className="text-[9px] text-blue-400 shrink-0">monthly</span>
+              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
                 {fmt(g.total * f)}
               </span>
             </div>
           ))}
           {ungroupedUSD > 0 && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2">
               <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔧 Ungrouped</span>
-              <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">
+              <span className="text-[9px] text-blue-400 shrink-0">monthly</span>
+              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
                 {fmt(ungroupedUSD * f)}
               </span>
             </div>
@@ -152,7 +179,7 @@ function GrandTotalCard({
           {addUSD > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📋 Additional</span>
-              <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">
+              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
                 {fmt(addUSD * f)}
               </span>
             </div>
@@ -160,37 +187,81 @@ function GrandTotalCard({
           {subsUSD > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔄 Subscriptions</span>
-              <span className="font-semibold text-indigo-300 text-xs shrink-0 whitespace-nowrap">
+              <span className="font-semibold text-blue-300 text-xs shrink-0 whitespace-nowrap">
                 {fmt(subsUSD * f)}
               </span>
             </div>
           )}
-          {devUSD > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost</span>
-              <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(devUSD)}
-              </span>
-            </div>
-          )}
-          {oneTimeTotal > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 One-time setup</span>
-              <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
-                {fmt(oneTimeTotal)}
+
+          {/* Recurring subtotal */}
+          {(recurringGroups.length > 0 || ungroupedUSD > 0 || addUSD > 0 || subsUSD > 0) && (
+            <div className="flex items-center gap-2 border-t border-white/10 pt-1.5">
+              <span className="text-gray-300 text-xs font-semibold flex-1">Recurring /{periodLabel}</span>
+              <span className="font-bold text-orange-300 text-sm shrink-0 whitespace-nowrap">
+                {fmt(recurringDisplay)}
               </span>
             </div>
           )}
 
-          <div className="border-t border-white/10 pt-2 flex items-center gap-2">
-            <span className="text-sm text-gray-200 font-semibold flex-1">Total /{periodLabel}</span>
-            <div className="text-right shrink-0">
-              <div className="text-lg font-bold text-white leading-tight whitespace-nowrap">
-                {fmt(totalUSD * f)}
+          {/* Yearly groups */}
+          {yearlyGroups.length > 0 && (
+            <>
+              <div className="border-t border-white/10 pt-1.5">
+                {yearlyGroups.map(g => (
+                  <div key={g.id} className="flex items-center gap-2 mb-1">
+                    <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
+                    <span className="text-[9px] text-indigo-400 shrink-0">yearly</span>
+                    <span className="font-semibold text-indigo-300 text-xs shrink-0 whitespace-nowrap">
+                      {fmt(g.total * 12)}/yr
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-300 text-xs font-semibold flex-1">Yearly total</span>
+                  <span className="font-bold text-indigo-300 text-sm shrink-0 whitespace-nowrap">
+                    {fmt(yearlyGroupsUSD)}/yr
+                  </span>
+                </div>
               </div>
-              <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(totalUSD * f)}</div>
+            </>
+          )}
+
+          {/* One-time groups */}
+          {(onetimeGroups.length > 0 || devUSD > 0 || oneTimeTotal > 0) && (
+            <div className="border-t border-white/10 pt-1.5 space-y-1">
+              {onetimeGroups.map(g => (
+                <div key={g.id} className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 {g.label}</span>
+                  <span className="text-[9px] text-amber-400 shrink-0">one-time</span>
+                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
+                    {fmt(g.total)}
+                  </span>
+                </div>
+              ))}
+              {devUSD > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost</span>
+                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
+                    {fmt(devUSD)}
+                  </span>
+                </div>
+              )}
+              {oneTimeTotal > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 One-time setup</span>
+                  <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">
+                    {fmt(oneTimeTotal)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-gray-300 text-xs font-semibold flex-1">One-time total</span>
+                <span className="font-bold text-amber-300 text-sm shrink-0 whitespace-nowrap">
+                  {fmt(onetimeTotal)}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -227,10 +298,12 @@ export function SummaryTab({ rate }: { rate: number }) {
         const nd = nodes.find(x => x.id === n.nodeId);
         return nd?.parentId === g.id;
       });
+      const billingType: GroupBillingType = (g.data.config as any)?.billingType ?? "monthly";
       return {
-        id:       g.id,
-        label:    g.data.label as string,
-        total:    services.reduce((s, n) => s + n.monthly, 0),
+        id:          g.id,
+        label:       g.data.label as string,
+        billingType,
+        total:       services.reduce((s, n) => s + n.monthly, 0),
         services,
       };
     }).filter(g => g.services.length > 0);
@@ -253,9 +326,9 @@ export function SummaryTab({ rate }: { rate: number }) {
   const oneTimeAdd   = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
   const oneTimeTotal = oneTimeSetup + oneTimeAdd;
 
-  // recurringUSD = everything that repeats monthly (no dev, no one-time)
+  // recurringUSD = only monthly groups + ungrouped + data transfer + additional + subs
   const recurringUSD =
-    groupBreakdowns.reduce((s, g) => s + g.total, 0) +
+    groupBreakdowns.filter(g => g.billingType === "monthly").reduce((s, g) => s + g.total, 0) +
     ungroupedUSD + cost.dataTransfer.monthly + addUSD + subsUSD;
 
   const periodLabel = period === "yearly" ? "yr" : "mo";
@@ -311,13 +384,28 @@ export function SummaryTab({ rate }: { rate: number }) {
         )}
 
         {/* Groups */}
-        {groupBreakdowns.map(g => (
-          <Row key={g.id} icon="📦" title={g.label} color="#FF9900"
-            subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
-            primary={fmt(g.total * f)} secondary={fmtAlt(g.total * f)}
-            items={g.services.map(n => ({ label: n.label, amount: fmt(n.monthly * f) }))}
-          />
-        ))}
+        {groupBreakdowns.map(g => {
+          const bColor = BILLING_COLORS[g.billingType];
+          const bLabel = BILLING_LABELS[g.billingType];
+          // onetime: show flat total; yearly: total×12/yr; monthly: total×f
+          const displayAmt =
+            g.billingType === "onetime" ? g.total :
+            g.billingType === "yearly"  ? g.total * 12 :
+            g.total * f;
+          const suffix =
+            g.billingType === "onetime" ? "" :
+            g.billingType === "yearly"  ? "/yr" :
+            `/${periodLabel}`;
+          return (
+            <Row key={g.id} icon="📦" title={g.label} color={bColor}
+              badge={bLabel}
+              subtitle={`${g.services.length} service${g.services.length !== 1 ? "s" : ""}`}
+              primary={fmt(displayAmt) + suffix}
+              secondary={fmtAlt(displayAmt) + suffix}
+              items={g.services.map(n => ({ label: n.label, amount: fmt(n.monthly * f) }))}
+            />
+          );
+        })}
 
         {/* Ungrouped services */}
         {ungroupedNodes.length > 0 && (
