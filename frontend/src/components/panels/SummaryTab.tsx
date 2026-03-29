@@ -294,8 +294,8 @@ function ThreeYearTable({
       {/* Selling price inputs */}
       <div className="space-y-4">
         <PriceInput
-          label="Project fee (one-time, Year 1 only)"
-          hint="One-time delivery / implementation fee charged in Year 1"
+          label="💼 Selling Price — Project Delivery Fee (Year 1 only)"
+          hint="Total price you charge the client to build & deliver the project (one-time, Year 1)"
           value={sellingPriceUSD}
           onChange={setSellingPrice}
           currency={currency} rate={rate} fmtAlt={fmtAlt}
@@ -1015,7 +1015,7 @@ export function SummaryTab({ rate }: { rate: number }) {
 
             {/* Year 1 project fee */}
             <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
-              {currency === "thb" ? "Project fee — Year 1 only (THB)" : "Project fee — Year 1 only (USD)"}
+              {currency === "thb" ? "💼 Selling Price / Project Fee — Year 1 (THB)" : "💼 Selling Price / Project Fee — Year 1 (USD)"}
               <div className="flex items-center gap-1.5">
                 <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
                 <input
