@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 import { useCanvasStore } from "../../store/canvasStore.ts";
 import { calculateDiagramCost } from "../../lib/costEngine.ts";
@@ -46,7 +47,9 @@ function oneTimeAmount(item: AdditionalCostItem): number {
 
 export function CostPanel() {
   const { nodes, edges, billingModel, setBillingModel, additionalCosts, subscriptions, exchangeRate, setExchangeRate } = useCanvasStore();
-  const [tab, setTab] = useState<Tab>("breakdown");
+  const [tab, setTab]       = useState<Tab>("breakdown");
+  const [expanded, setExpanded] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const cost = useMemo(
     () => calculateDiagramCost(nodes, edges, billingModel),
@@ -61,16 +64,32 @@ export function CostPanel() {
     "line_flex_message","line_rich_menu","line_custom_payload",
     "line_api_call","line_ai_agent","line_intent","line_dialog",
   ]);
-  const totalInfra       = cost.perNode.filter(n => n.serviceType !== "custom" && !API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0) + cost.dataTransfer.monthly;
-  const totalApiLine     = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0);
-  const totalExternal    = cost.perNode.filter(n => n.serviceType === "custom").reduce((s, n) => s + n.monthly, 0);
+
+  // ── Custom node helpers ─────────────────────────────────────────────────
+  const customBillingType = (nodeId: string) => {
+    const n = nodes.find(nd => nd.id === nodeId);
+    return ((n?.data.config as any)?.billingType ?? "monthly") as string;
+  };
+
+  // Custom nodes grouped by billing type (looked up from raw nodes)
+  const customOnetimeNodes  = useMemo(() => nodes.filter(n => n.type === "custom" && ((n.data.config as any).billingType ?? "monthly") === "onetime_setup"),  [nodes]);
+  const customSubscribeNodes = useMemo(() => nodes.filter(n => n.type === "custom" && ((n.data.config as any).billingType ?? "monthly") === "subscribe"),      [nodes]);
+  const customRoundingNodes  = useMemo(() => nodes.filter(n => n.type === "custom" && ((n.data.config as any).billingType ?? "monthly") === "rounding_bill"),  [nodes]);
+
+  const customOnetimeCost = customOnetimeNodes.reduce((s, n) => s + ((n.data.config as any).totalCostUSD ?? 0), 0);
+
+  // ── Cost totals ─────────────────────────────────────────────────────────
+  const totalInfra        = cost.perNode.filter(n => n.serviceType !== "custom" && !API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0) + cost.dataTransfer.monthly;
+  const totalApiLine      = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType)).reduce((s, n) => s + n.monthly, 0);
+  // Only monthly-billed custom nodes contribute to recurring; subscribe/rounding are amortised by cost engine
+  const totalExternal     = cost.perNode.filter(n => n.serviceType === "custom").reduce((s, n) => s + n.monthly, 0);
   const totalAddRecurring = additionalCosts.reduce((s, c) => s + monthlyRecurring(c), 0);
   const totalAddOneTime   = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
-  const totalSubs        = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
-  const totalMonthly     = totalInfra + totalApiLine + totalExternal + totalAddRecurring + totalSubs;
+  const totalSubs         = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
+  const totalMonthly      = totalInfra + totalApiLine + totalExternal + totalAddRecurring + totalSubs;
 
   const totalSetupGroups  = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
-  const totalOneTime      = totalSetupGroups + totalAddOneTime;
+  const totalOneTime      = totalSetupGroups + totalAddOneTime + customOnetimeCost;
 
   const totalSavingsNode = cost.perNode.reduce((s, n) => s + ((n.baseMonthly ?? n.monthly) - n.monthly), 0);
   const totalSavingsAdd  = additionalCosts.reduce((s, c) => {
@@ -79,13 +98,37 @@ export function CostPanel() {
   }, 0);
   const totalSavings = totalSavingsNode + totalSavingsAdd;
 
-  const nodeGroupMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    nodes.filter(n => n.type === "group").forEach(g => {
-      nodes.filter(n => n.parentId === g.id).forEach(child => { m[child.id] = g.data.label; });
+  // ── Group breakdown ─────────────────────────────────────────────────────
+  const groupBreakdowns = useMemo(() => {
+    const groupNodes = nodes.filter(n => n.type === "group");
+    return groupNodes.map(g => {
+      const services = cost.perNode.filter(n => {
+        const nd = nodes.find(x => x.id === n.nodeId);
+        return nd?.parentId === g.id;
+      });
+      return {
+        id: g.id,
+        label: g.data.label,
+        total: services.reduce((s, n) => s + n.monthly, 0),
+        services,
+      };
+    }).filter(g => g.services.length > 0);
+  }, [nodes, cost.perNode]);
+
+  const ungroupedNodes = useMemo(() =>
+    cost.perNode.filter(n => {
+      if (n.serviceType === "custom") return false; // custom has own section
+      const nd = nodes.find(x => x.id === n.nodeId);
+      return !nd?.parentId;
+    }),
+  [cost.perNode, nodes]);
+
+  const toggleGroup = (id: string) =>
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
-    return m;
-  }, [nodes]);
 
   const TAB_DEFS: { key: Tab; label: string; badge?: number }[] = [
     { key: "breakdown",  label: "Breakdown" },
@@ -95,11 +138,23 @@ export function CostPanel() {
   ];
 
   return (
-    <div className="w-72 bg-white border-l border-gray-100 flex flex-col h-full shadow-xl">
+    <div
+      className="bg-white border-l border-gray-100 flex flex-col h-full shadow-xl transition-all duration-200"
+      style={{ width: expanded ? 480 : 288 }}
+    >
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100 space-y-2">
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Cost</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Cost</div>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            title={expanded ? "Collapse panel" : "Expand panel"}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {expanded ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          </button>
+        </div>
         <div className="space-y-1">
           {/* Big total = recurring + dev */}
           <div className="text-2xl font-bold text-gray-900 leading-tight">
@@ -180,121 +235,223 @@ export function CostPanel() {
         {/* Breakdown tab */}
         {tab === "breakdown" && (
           <>
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Service Breakdown</div>
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
 
-              {cost.perNode.map((n) => {
-                const pct   = totalMonthly > 0 ? (n.monthly / totalMonthly) * 100 : 0;
-                const color = SERVICE_COLORS[n.serviceType] ?? SERVICE_COLORS.default;
-                const hasDis = (n.discountPct ?? 0) > 0;
-                const groupLabel = nodeGroupMap[n.nodeId];
+              {/* ── Groups ────────────────────────────────────────────── */}
+              {groupBreakdowns.length > 0 && (
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Groups</div>
+              )}
+              {groupBreakdowns.map(g => {
+                const pct   = totalMonthly > 0 ? (g.total / totalMonthly) * 100 : 0;
+                const open  = expandedGroups.has(g.id);
                 return (
-                  <div key={n.nodeId} className="space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm text-gray-700 truncate">{n.label}</div>
-                        {groupLabel && <div className="text-[10px] text-gray-400">in {groupLabel}</div>}
-                        {hasDis && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-gray-400 line-through">{fmt(n.baseMonthly ?? n.monthly)}</span>
-                            <span className="text-[10px] bg-green-100 text-green-700 rounded px-1 font-medium">-{n.discountPct}%</span>
-                          </div>
-                        )}
-                      </div>
+                  <div key={g.id} className="rounded-lg border border-gray-100 overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 transition-colors"
+                      onClick={() => toggleGroup(g.id)}
+                    >
+                      <ChevronDown size={12} className="text-gray-400 shrink-0 transition-transform" style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }} />
+                      <span className="flex-1 text-sm font-medium text-gray-800 text-left truncate">{g.label}</span>
                       <div className="text-right shrink-0">
-                        <div className="text-sm font-semibold text-gray-900">{fmt(n.monthly)}</div>
-                        <div className="text-[10px] text-gray-400">{fmtUSD(n.monthly)}</div>
+                        <div className="text-sm font-semibold text-gray-900">{fmt(g.total)}</div>
+                        <div className="text-[10px] text-gray-400">{fmtUSD(g.total)}/mo</div>
                       </div>
-                    </div>
-                    {n.monthlyMin !== undefined && n.monthlyMax !== undefined && (
-                      <div className="text-[10px] text-gray-400">{fmt(n.monthlyMin)} – {fmt(n.monthlyMax)} (ASG)</div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                    </button>
+                    {/* Progress bar */}
+                    <div className="px-3 pb-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-blue-400" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-[10px] text-gray-400 w-9 text-right">{pct.toFixed(1)}%</span>
                     </div>
+                    {/* Expanded service list */}
+                    {open && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 space-y-1.5">
+                        {g.services.map(n => {
+                          const color = SERVICE_COLORS[n.serviceType] ?? SERVICE_COLORS.default;
+                          return (
+                            <div key={n.nodeId} className="flex items-center gap-2 text-xs">
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                              <span className="flex-1 text-gray-600 truncate">{n.label}</span>
+                              <span className="font-medium text-gray-700 shrink-0">{fmt(n.monthly)}/mo</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
-              {/* Subscriptions in breakdown */}
-              {subscriptions.length > 0 && (
-                <>
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-1 border-t border-gray-100">
-                    Subscriptions
-                  </div>
-                  {subscriptions.map((sub) => {
-                    const m = subMonthly(sub);
-                    const pct = totalMonthly > 0 ? (m / totalMonthly) * 100 : 0;
-                    return (
-                      <div key={sub.id} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <div>
-                            <span className="text-gray-700">{sub.service}</span>
-                            {sub.plan && <span className="text-gray-400 text-xs"> · {sub.plan}</span>}
-                          </div>
-                          <span className="font-semibold text-gray-900">{fmt(m)}</span>
+              {/* ── Ungrouped services ─────────────────────────────────── */}
+              {ungroupedNodes.length > 0 && (<>
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-1 border-t border-gray-100">Ungrouped</div>
+                {ungroupedNodes.map(n => {
+                  const pct   = totalMonthly > 0 ? (n.monthly / totalMonthly) * 100 : 0;
+                  const color = SERVICE_COLORS[n.serviceType] ?? SERVICE_COLORS.default;
+                  return (
+                    <div key={n.nodeId} className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                          <span className="text-sm text-gray-700 truncate">{n.label}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-indigo-400" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-[10px] text-gray-400 w-9 text-right">{pct.toFixed(1)}%</span>
+                        <div className="text-right shrink-0">
+                          <div className="text-sm font-semibold text-gray-900">{fmt(n.monthly)}</div>
+                          <div className="text-[10px] text-gray-400">{fmtUSD(n.monthly)}/mo</div>
                         </div>
                       </div>
-                    );
-                  })}
-                </>
-              )}
-
-              {/* Data transfer */}
-              {cost.dataTransfer.monthly > 0 && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Data Transfer</span>
-                    <div className="text-right">
-                      <div className="font-semibold text-gray-900">{fmt(cost.dataTransfer.monthly)}</div>
-                      <div className="text-[10px] text-gray-400">{fmtUSD(cost.dataTransfer.monthly)}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                        </div>
+                        <span className="text-[10px] text-gray-400 w-9 text-right">{pct.toFixed(1)}%</span>
+                      </div>
                     </div>
+                  );
+                })}
+              </>)}
+
+              {/* ── Monthly external APIs ──────────────────────────────── */}
+              {cost.perNode.filter(n => n.serviceType === "custom" && customBillingType(n.nodeId) === "monthly").length > 0 && (<>
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-1 border-t border-gray-100">External APIs (monthly)</div>
+                {cost.perNode.filter(n => n.serviceType === "custom" && customBillingType(n.nodeId) === "monthly").map(n => {
+                  const pct = totalMonthly > 0 ? (n.monthly / totalMonthly) * 100 : 0;
+                  return (
+                    <div key={n.nodeId} className="space-y-1">
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="text-sm text-gray-700 truncate">{n.label}</span>
+                        <div className="text-right shrink-0">
+                          <div className="text-sm font-semibold text-gray-900">{fmt(n.monthly)}</div>
+                          <div className="text-[10px] text-gray-400">{fmtUSD(n.monthly)}/mo</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-slate-400" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[10px] text-gray-400 w-9 text-right">{pct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>)}
+
+              {/* ── Data transfer ─────────────────────────────────────── */}
+              {cost.dataTransfer.monthly > 0 && (
+                <div className="flex justify-between items-center text-sm pt-1 border-t border-gray-100">
+                  <span className="text-gray-500">🔀 Data Transfer</span>
+                  <div className="text-right">
+                    <div className="font-semibold text-gray-900">{fmt(cost.dataTransfer.monthly)}</div>
+                    <div className="text-[10px] text-gray-400">{fmtUSD(cost.dataTransfer.monthly)}/mo</div>
                   </div>
                 </div>
               )}
 
-              {/* One-time section */}
-              {(cost.setupCosts.length > 0 || totalAddOneTime > 0) && (
-                <>
-                  <div className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider pt-1 border-t border-gray-100">
-                    One-time / Setup
-                  </div>
-                  {cost.setupCosts.map((s) => (
-                    <div key={s.nodeId} className="flex justify-between items-center text-sm">
+              {/* ── SaaS Subscriptions ────────────────────────────────── */}
+              {(subscriptions.length > 0 || customSubscribeNodes.length > 0) && (<>
+                <div className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider pt-1 border-t border-gray-100">
+                  🔄 Yearly Subscribe
+                </div>
+                {subscriptions.map(sub => {
+                  const m = subMonthly(sub);
+                  return (
+                    <div key={sub.id} className="flex justify-between items-center text-sm">
                       <div>
-                        <div className="text-gray-700 truncate">{s.label}</div>
-                        <div className="text-[10px]" style={{ color: GROUP_COLORS[s.groupType] ?? "#94A3B8" }}>
-                          {s.groupType} group
+                        <span className="text-gray-700">{sub.service}</span>
+                        {sub.plan && <span className="text-gray-400 text-xs"> · {sub.plan}</span>}
+                        <div className="text-[10px] text-indigo-400">
+                          {sub.billingPeriod === "yearly" ? "yearly · " : "monthly · "}{fmtUSD(sub.amountUSD)}/unit
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-semibold text-amber-700">{fmt(s.amountUSD)}</div>
-                        <div className="text-[10px] text-gray-400">{fmtUSD(s.amountUSD)}</div>
+                        <div className="font-semibold text-indigo-700">{fmt(m)}/mo</div>
                       </div>
                     </div>
-                  ))}
-                  {additionalCosts.filter(c => c.billingPeriod === "one-time").map((c) => (
-                    <div key={c.id} className="flex justify-between text-sm">
-                      <span className="text-gray-700 truncate flex-1">{c.label || c.category}</span>
+                  );
+                })}
+                {customSubscribeNodes.map(n => {
+                  const totalCostUSD = (n.data.config as any).totalCostUSD ?? 0;
+                  return (
+                    <div key={n.id} className="flex justify-between items-center text-sm">
+                      <div>
+                        <span className="text-gray-700">{n.data.label}</span>
+                        <div className="text-[10px] text-indigo-400">custom · {fmtUSD(totalCostUSD)}/yr</div>
+                      </div>
                       <div className="text-right shrink-0">
-                        <div className="font-semibold text-amber-700">{fmt(oneTimeAmount(c))}</div>
-                        <div className="text-[10px] text-gray-400">{fmtUSD(oneTimeAmount(c))}</div>
+                        <div className="font-semibold text-indigo-700">{fmt(totalCostUSD / 12)}/mo</div>
                       </div>
                     </div>
-                  ))}
-                </>
-              )}
+                  );
+                })}
+              </>)}
 
-              {cost.perNode.length === 0 && additionalCosts.length === 0 && subscriptions.length === 0 && (
+              {/* ── Periodic (rounding bill) ───────────────────────────── */}
+              {customRoundingNodes.length > 0 && (<>
+                <div className="text-[10px] font-semibold text-sky-400 uppercase tracking-wider pt-1 border-t border-gray-100">
+                  🔁 Periodic Bill
+                </div>
+                {customRoundingNodes.map(n => {
+                  const totalCostUSD = (n.data.config as any).totalCostUSD ?? 0;
+                  const yrs = Math.max(1, (n.data.config as any).intervalYears ?? 3);
+                  return (
+                    <div key={n.id} className="flex justify-between items-center text-sm">
+                      <div>
+                        <span className="text-gray-700">{n.data.label}</span>
+                        <div className="text-[10px] text-sky-400">{fmtUSD(totalCostUSD)} every {yrs}yr · amortised</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-semibold text-sky-700">{fmt(totalCostUSD / (yrs * 12))}/mo</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>)}
+
+              {/* ── One-time / Setup ──────────────────────────────────── */}
+              {totalOneTime > 0 && (<>
+                <div className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider pt-1 border-t border-gray-100">
+                  📦 One-time / Setup
+                </div>
+                {cost.setupCosts.map(s => (
+                  <div key={s.nodeId} className="flex justify-between items-center text-sm">
+                    <div>
+                      <div className="text-gray-700 truncate">{s.label}</div>
+                      <div className="text-[10px]" style={{ color: GROUP_COLORS[s.groupType] ?? "#94A3B8" }}>{s.groupType} group</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-semibold text-amber-700">{fmt(s.amountUSD)}</div>
+                      <div className="text-[10px] text-gray-400">{fmtUSD(s.amountUSD)}</div>
+                    </div>
+                  </div>
+                ))}
+                {customOnetimeNodes.map(n => {
+                  const amt = (n.data.config as any).totalCostUSD ?? 0;
+                  return (
+                    <div key={n.id} className="flex justify-between items-center text-sm">
+                      <div>
+                        <div className="text-gray-700 truncate">{n.data.label}</div>
+                        <div className="text-[10px] text-amber-400">custom · one-time</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-semibold text-amber-700">{fmt(amt)}</div>
+                        <div className="text-[10px] text-gray-400">{fmtUSD(amt)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {additionalCosts.filter(c => c.billingPeriod === "one-time").map(c => (
+                  <div key={c.id} className="flex justify-between text-sm">
+                    <span className="text-gray-700 truncate flex-1">{c.label || c.category}</span>
+                    <div className="text-right shrink-0">
+                      <div className="font-semibold text-amber-700">{fmt(oneTimeAmount(c))}</div>
+                      <div className="text-[10px] text-gray-400">{fmtUSD(oneTimeAmount(c))}</div>
+                    </div>
+                  </div>
+                ))}
+              </>)}
+
+              {groupBreakdowns.length === 0 && ungroupedNodes.length === 0 && cost.perNode.length === 0 && additionalCosts.length === 0 && subscriptions.length === 0 && (
                 <div className="text-center text-gray-400 text-sm py-8">
                   Drop services or add<br />costs to begin
                 </div>

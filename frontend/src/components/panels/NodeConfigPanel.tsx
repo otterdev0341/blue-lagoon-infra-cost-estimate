@@ -659,27 +659,112 @@ export function NodeConfigPanel({ nodeId, onClose }: Props) {
       </>)}
 
       {/* Custom / External Service */}
-      {node.type === "custom" && (<>
-        {field("What is this service?",
-          <textarea rows={2}
-            className="border rounded px-2 py-1 text-sm w-full resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
-            placeholder="e.g. Stripe payment API, SendGrid email…"
-            value={cfg.description ?? ""}
-            onChange={(e) => updateNodeConfig(nodeId, { description: e.target.value } as any)}
-          />
-        )}
-        {field("Region / Location", inp("region", "text"))}
-        <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 space-y-2">
-          <div className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Cost by Request</div>
-          {field("Cost per request (USD)", inp("costPerRequest", "number", { min: 0, step: 0.000001 }))}
-          {field("Requests per month", inp("requestsPerMonth", "number", { min: 0 }))}
-        </div>
-        <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 space-y-2">
-          <div className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide">Cost by Hour</div>
-          {field("Cost per hour (USD)", inp("costPerHour", "number", { min: 0, step: 0.001 }))}
-          {field("Hours per month", inp("hoursPerMonth", "number", { min: 0, max: 744 }))}
-        </div>
-      </>)}
+      {node.type === "custom" && (() => {
+        const billingType = (cfg.billingType as string) ?? "monthly";
+        const BILLING_OPTIONS: { value: string; label: string; desc: string; color: string }[] = [
+          { value: "monthly",      label: "Monthly",        desc: "Recurring — pay per request or hour",   color: "#3B82F6" },
+          { value: "onetime_setup",label: "One-time Setup", desc: "Pay only once at project start",        color: "#F59E0B" },
+          { value: "subscribe",    label: "Subscribe",      desc: "Yearly — pay every year",               color: "#8B5CF6" },
+          { value: "rounding_bill",label: "Rounding Bill",  desc: "Pay every N years (e.g. licence renewal)", color: "#0EA5E9" },
+        ];
+        const current = BILLING_OPTIONS.find(o => o.value === billingType) ?? BILLING_OPTIONS[0];
+        return (
+          <>
+            {field("What is this service?",
+              <textarea rows={2}
+                className="border rounded px-2 py-1 text-sm w-full resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. Stripe payment API, SendGrid email…"
+                value={cfg.description ?? ""}
+                onChange={(e) => updateNodeConfig(nodeId, { description: e.target.value } as any)}
+              />
+            )}
+
+            {/* Billing type selector */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-gray-600">Billing Type</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {BILLING_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => updateNodeConfig(nodeId, { billingType: opt.value } as any)}
+                    className="text-left rounded-lg border px-2.5 py-2 transition-all"
+                    style={billingType === opt.value
+                      ? { borderColor: opt.color, background: opt.color + "15", color: opt.color }
+                      : { borderColor: "#E5E7EB", background: "white", color: "#6B7280" }}
+                  >
+                    <div className="text-xs font-semibold leading-tight">{opt.label}</div>
+                    <div className="text-[9px] leading-tight mt-0.5 opacity-70">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10px] px-2 py-1 rounded" style={{ background: current.color + "12", color: current.color }}>
+                {billingType === "monthly"       && "Cost = (requests × rate) + (hours × rate) per month"}
+                {billingType === "onetime_setup" && "Cost shown as one-time upfront payment at project start"}
+                {billingType === "subscribe"     && "Cost = total ÷ 12 monthly equivalent · paid yearly"}
+                {billingType === "rounding_bill" && "Cost = total ÷ (N years × 12) monthly equivalent"}
+              </div>
+            </div>
+
+            {/* Monthly fields */}
+            {billingType === "monthly" && (<>
+              <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 space-y-2">
+                <div className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Cost by Request</div>
+                {field("Cost per request (USD)", inp("costPerRequest", "number", { min: 0, step: 0.000001 }))}
+                {field("Requests per month", inp("requestsPerMonth", "number", { min: 0 }))}
+              </div>
+              <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 space-y-2">
+                <div className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide">Cost by Hour</div>
+                {field("Cost per hour (USD)", inp("costPerHour", "number", { min: 0, step: 0.001 }))}
+                {field("Hours per month", inp("hoursPerMonth", "number", { min: 0, max: 744 }))}
+              </div>
+            </>)}
+
+            {/* One-time setup */}
+            {billingType === "onetime_setup" && (
+              <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 space-y-2">
+                <div className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">One-time Amount</div>
+                {field("Total cost (USD)", inp("totalCostUSD", "number", { min: 0, step: 1 }))}
+                <div className="text-[10px] text-amber-500">
+                  {((cfg.totalCostUSD as number) ?? 0) > 0
+                    ? `฿${((cfg.totalCostUSD as number) * DEFAULT_RATE).toLocaleString()} · $${(cfg.totalCostUSD as number).toFixed(2)}`
+                    : "Enter amount above"}
+                </div>
+              </div>
+            )}
+
+            {/* Subscribe (yearly) */}
+            {billingType === "subscribe" && (
+              <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 space-y-2">
+                <div className="text-[10px] font-semibold text-purple-600 uppercase tracking-wide">Yearly Subscription</div>
+                {field("Cost per year (USD)", inp("totalCostUSD", "number", { min: 0, step: 1 }))}
+                <div className="text-[10px] text-purple-500">
+                  {((cfg.totalCostUSD as number) ?? 0) > 0
+                    ? `≈ $${((cfg.totalCostUSD as number) / 12).toFixed(2)}/mo · ฿${((cfg.totalCostUSD as number) / 12 * DEFAULT_RATE).toLocaleString()}/mo`
+                    : "Enter yearly amount above"}
+                </div>
+              </div>
+            )}
+
+            {/* Rounding bill (every N years) */}
+            {billingType === "rounding_bill" && (
+              <div className="rounded-lg bg-sky-50 border border-sky-100 px-3 py-2 space-y-2">
+                <div className="text-[10px] font-semibold text-sky-600 uppercase tracking-wide">Periodic Payment</div>
+                {field("Total cost (USD)", inp("totalCostUSD", "number", { min: 0, step: 1 }))}
+                {field("Pay every N years", inp("intervalYears", "number", { min: 1, step: 1 }))}
+                {((cfg.totalCostUSD as number) ?? 0) > 0 && (() => {
+                  const yrs = Math.max(1, (cfg.intervalYears as number) ?? 3);
+                  const mo = (cfg.totalCostUSD as number) / (yrs * 12);
+                  return (
+                    <div className="text-[10px] text-sky-500">
+                      ≈ ${mo.toFixed(2)}/mo · ฿{(mo * DEFAULT_RATE).toLocaleString()}/mo (amortised)
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -6,14 +6,14 @@ import { fmtTHB, fmtUSD } from "../../lib/utils.ts";
 import { subMonthly, subYearlyUpfront } from "./SubscribeTab.tsx";
 import type { AdditionalCostItem } from "../../types.ts";
 
-type Period = "monthly" | "daily" | "yearly";
+type Period = "monthly" | "yearly";
+type Currency = "thb" | "usd";
 
 const PERIOD_LABELS: Record<Period, string> = {
-  monthly: "Monthly", daily: "Daily", yearly: "Yearly",
+  monthly: "Monthly", yearly: "Yearly",
 };
 
 function periodFactor(p: Period): number {
-  if (p === "daily")  return 1 / 30;
   if (p === "yearly") return 12;
   return 1;
 }
@@ -35,14 +35,14 @@ interface RowProps {
   icon: string;
   title: string;
   subtitle: string;
-  amountTHB: number;
-  amountUSD: number;
+  primary: string;      // pre-formatted primary amount
+  secondary?: string;   // pre-formatted secondary (smaller)
   color: string;
   badge?: string;
-  items?: { label: string; thb: number }[];
+  items?: { label: string; amount: string }[];
 }
 
-function Row({ icon, title, subtitle, amountTHB, amountUSD, color, badge, items }: RowProps) {
+function Row({ icon, title, subtitle, primary, secondary, color, badge, items }: RowProps) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: color + "35" }}>
@@ -68,8 +68,8 @@ function Row({ icon, title, subtitle, amountTHB, amountUSD, color, badge, items 
           <div className="text-[10px] text-gray-400 truncate">{subtitle}</div>
         </div>
         <div className="text-right shrink-0 pl-1">
-          <div className="text-sm font-bold whitespace-nowrap" style={{ color }}>{fmtTHB(amountTHB)}</div>
-          <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtUSD(amountUSD)}</div>
+          <div className="text-sm font-bold whitespace-nowrap" style={{ color }}>{primary}</div>
+          {secondary && <div className="text-[10px] text-gray-400 whitespace-nowrap">{secondary}</div>}
         </div>
       </button>
       {open && items && items.length > 0 && (
@@ -77,7 +77,7 @@ function Row({ icon, title, subtitle, amountTHB, amountUSD, color, badge, items 
           {items.map((it, i) => (
             <div key={i} className="flex justify-between text-xs text-gray-600">
               <span className="truncate flex-1">{it.label}</span>
-              <span className="font-medium ml-2" style={{ color }}>{fmtTHB(it.thb)}</span>
+              <span className="font-medium ml-2" style={{ color }}>{it.amount}</span>
             </div>
           ))}
         </div>
@@ -88,8 +88,8 @@ function Row({ icon, title, subtitle, amountTHB, amountUSD, color, badge, items 
 
 // ── Section header divider ─────────────────────────────────────────────────
 
-function SectionHeader({ label, color, totalTHB, totalUSD, hint }: {
-  label: string; color: string; totalTHB: number; totalUSD: number; hint?: string;
+function SectionHeader({ label, color, primary, secondary, hint }: {
+  label: string; color: string; primary: string; secondary?: string; hint?: string;
 }) {
   return (
     <div className="flex items-center gap-2 pt-1 pb-0.5">
@@ -99,8 +99,8 @@ function SectionHeader({ label, color, totalTHB, totalUSD, hint }: {
         {hint && <span className="text-[9px] text-gray-400 italic ml-1.5">{hint}</span>}
       </div>
       <div className="text-right shrink-0">
-        <div className="text-xs font-bold" style={{ color }}>{fmtTHB(totalTHB)}</div>
-        <div className="text-[9px] text-gray-400">{fmtUSD(totalUSD)}</div>
+        <div className="text-xs font-bold" style={{ color }}>{primary}</div>
+        {secondary && <div className="text-[9px] text-gray-400">{secondary}</div>}
       </div>
     </div>
   );
@@ -120,41 +120,45 @@ const API_LINE_TYPES = new Set([...API_TYPES, ...LINE_TYPES]);
 
 export function SummaryTab({ rate }: { rate: number }) {
   const { nodes, edges, billingModel, additionalCosts, subscriptions, sellingPriceUSD, setSellingPrice } = useCanvasStore();
-  const [period, setPeriod] = useState<Period>("monthly");
+  const [period, setPeriod]     = useState<Period>("monthly");
+  const [currency, setCurrency] = useState<Currency>("thb");
 
   const cost = calculateDiagramCost(nodes, edges, billingModel);
   const f    = periodFactor(period);
 
+  // ── Format helpers ────────────────────────────────────────────────────────
+  const fmt  = (usd: number) => currency === "thb" ? fmtTHB(usd * rate) : fmtUSD(usd);
+  const fmtAlt = (usd: number) => currency === "thb" ? fmtUSD(usd) : fmtTHB(usd * rate);
+
   // ── Buckets ──────────────────────────────────────────────────────────────
-  const infraNodes   = cost.perNode.filter(n => n.serviceType !== "custom" && !API_LINE_TYPES.has(n.serviceType));
-  const devNodes     = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType));   // manday = project cost
-  const externalNodes= cost.perNode.filter(n => n.serviceType === "custom");
+  const infraNodes    = cost.perNode.filter(n => n.serviceType !== "custom" && !API_LINE_TYPES.has(n.serviceType));
+  const devNodes      = cost.perNode.filter(n => API_LINE_TYPES.has(n.serviceType));
+  const externalNodes = cost.perNode.filter(n => n.serviceType === "custom");
 
   // ── Recurring (monthly cloud bill) ───────────────────────────────────────
   const infraUSD     = infraNodes.reduce((s, n) => s + n.monthly, 0) + cost.dataTransfer.monthly;
   const externalUSD  = externalNodes.reduce((s, n) => s + n.monthly, 0);
   const addUSD       = additionalCosts.reduce((s, c) => s + recurringMonthly(c), 0);
   const subsUSD      = subscriptions.reduce((s, sub) => s + subMonthly(sub), 0);
-  const recurringUSD = infraUSD + externalUSD + addUSD + subsUSD;  // what client pays monthly
+  const recurringUSD = infraUSD + externalUSD + addUSD + subsUSD;
 
   // ── Development cost (manday — NOT monthly recurring) ────────────────────
-  const devUSD       = devNodes.reduce((s, n) => s + n.monthly, 0);  // stored as USD per manday equivalent
+  const devUSD = devNodes.reduce((s, n) => s + n.monthly, 0);
 
   // ── One-time items ────────────────────────────────────────────────────────
   const oneTimeSetup = cost.setupCosts.reduce((s, c) => s + c.amountUSD, 0);
   const oneTimeAdd   = additionalCosts.reduce((s, c) => s + oneTimeAmount(c), 0);
 
-  // ── Display values (recurring respects period; dev cost is flat project cost) ──
+  // ── Display values ────────────────────────────────────────────────────────
   const recurringDisplay = recurringUSD * f;
-  const devDisplay       = devUSD;            // manday cost doesn't scale with period
 
   const addCategories = [...new Set(
     additionalCosts.filter(c => c.billingPeriod !== "one-time").map(c => c.category)
   )].join(", ");
 
-  const sellingDisplay = sellingPriceUSD * f;   // used by selling price input binding
+  const sellingDisplay = sellingPriceUSD * f;
 
-  // Yearly subscriptions — full upfront amount (paid at project start)
+  // Yearly subscriptions — full upfront amount
   const subsYearlyUpfrontUSD = subscriptions
     .filter(s => s.billingPeriod === "yearly")
     .reduce((sum, s) => sum + subYearlyUpfront(s), 0);
@@ -164,20 +168,30 @@ export function SummaryTab({ rate }: { rate: number }) {
   return (
     <div className="flex flex-col h-full">
 
-      {/* Period selector — only affects recurring section */}
-      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
-          {(["monthly", "daily", "yearly"] as Period[]).map((p) => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className="flex-1 py-1.5 transition-colors"
-              style={period === p
-                ? { background: "#1D6FCA", color: "white" }
-                : { background: "white", color: "#64748B" }}>
-              {PERIOD_LABELS[p]}
-            </button>
-          ))}
+      {/* ── Controls: Period + Currency ───────────────────────────────── */}
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100 space-y-2">
+        {/* Period + Currency in one row */}
+        <div className="flex gap-2">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium flex-1">
+            {(["monthly", "yearly"] as Period[]).map((p) => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className="flex-1 py-1.5 transition-colors"
+                style={period === p
+                  ? { background: "#1D6FCA", color: "white" }
+                  : { background: "white", color: "#64748B" }}>
+                {PERIOD_LABELS[p]}
+              </button>
+            ))}
+          </div>
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium flex-1">
+            <button className="flex-1 py-1.5 transition-colors"
+              style={currency === "thb" ? { background: "#0891B2", color: "white" } : { background: "white", color: "#64748B" }}
+              onClick={() => setCurrency("thb")}>฿ THB</button>
+            <button className="flex-1 py-1.5 transition-colors"
+              style={currency === "usd" ? { background: "#0891B2", color: "white" } : { background: "white", color: "#64748B" }}
+              onClick={() => setCurrency("usd")}>$ USD</button>
+          </div>
         </div>
-        <p className="text-[9px] text-gray-400 mt-1 text-center">Period applies to recurring costs only</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
@@ -186,8 +200,8 @@ export function SummaryTab({ rate }: { rate: number }) {
         <SectionHeader
           label="Recurring Cost"
           color="#FF9900"
-          totalTHB={recurringDisplay * rate}
-          totalUSD={recurringDisplay}
+          primary={fmt(recurringDisplay)}
+          secondary={fmtAlt(recurringDisplay)}
           hint={`per ${periodLabel}`}
         />
 
@@ -195,11 +209,11 @@ export function SummaryTab({ rate }: { rate: number }) {
         <Row
           icon="🏗" title="Infrastructure" color="#FF9900"
           subtitle={infraNodes.map(n => n.label).join(", ") || "No AWS services"}
-          amountTHB={infraUSD * f * rate} amountUSD={infraUSD * f}
+          primary={fmt(infraUSD * f)} secondary={fmtAlt(infraUSD * f)}
           items={[
-            ...infraNodes.map(n => ({ label: n.label, thb: n.monthly * f * rate })),
+            ...infraNodes.map(n => ({ label: n.label, amount: fmt(n.monthly * f) })),
             ...(cost.dataTransfer.monthly > 0
-              ? [{ label: "Data Transfer", thb: cost.dataTransfer.monthly * f * rate }] : []),
+              ? [{ label: "Data Transfer", amount: fmt(cost.dataTransfer.monthly * f) }] : []),
           ]}
         />
 
@@ -207,18 +221,18 @@ export function SummaryTab({ rate }: { rate: number }) {
         <Row
           icon="🌐" title="External Services" color="#8C4FFF"
           subtitle={externalNodes.map(n => n.label).join(", ") || "No external APIs"}
-          amountTHB={externalUSD * f * rate} amountUSD={externalUSD * f}
-          items={externalNodes.map(n => ({ label: n.label, thb: n.monthly * f * rate }))}
+          primary={fmt(externalUSD * f)} secondary={fmtAlt(externalUSD * f)}
+          items={externalNodes.map(n => ({ label: n.label, amount: fmt(n.monthly * f) }))}
         />
 
         {/* Additional Costs */}
         <Row
           icon="📋" title="Additional Costs" color="#0EA5E9"
           subtitle={addCategories || "No additional costs (recurring)"}
-          amountTHB={addUSD * f * rate} amountUSD={addUSD * f}
+          primary={fmt(addUSD * f)} secondary={fmtAlt(addUSD * f)}
           items={additionalCosts.filter(c => c.billingPeriod !== "one-time").map(c => ({
             label: c.label || c.category,
-            thb: recurringMonthly(c) * f * rate,
+            amount: fmt(recurringMonthly(c) * f),
           }))}
         />
 
@@ -228,53 +242,30 @@ export function SummaryTab({ rate }: { rate: number }) {
           subtitle={subscriptions.length > 0
             ? subscriptions.map(s => s.service).join(", ")
             : "No SaaS subscriptions"}
-          amountTHB={subsUSD * f * rate} amountUSD={subsUSD * f}
+          primary={fmt(subsUSD * f)} secondary={fmtAlt(subsUSD * f)}
           items={subscriptions.map(s => ({
             label: `${s.service}${s.plan ? ` · ${s.plan}` : ""}`,
-            thb: subMonthly(s) * f * rate,
+            amount: fmt(subMonthly(s) * f),
           }))}
         />
 
-        {/* Recurring total bar */}
-        <div className="rounded-lg bg-orange-50 border border-orange-100 px-3 py-2 flex justify-between items-center">
-          <div>
-            <div className="text-xs font-semibold text-orange-700">Monthly Cloud Bill</div>
-            <div className="text-[10px] text-orange-400">Infra + Services + Subs</div>
-          </div>
-          <div className="text-right">
-            <div className="text-base font-bold text-orange-600">{fmtTHB(recurringDisplay * rate)}</div>
-            <div className="text-[10px] text-gray-400">{fmtUSD(recurringDisplay)}</div>
-          </div>
-        </div>
-
         {/* ══ DEVELOPMENT COST ═════════════════════════════════════════════ */}
-        <SectionHeader
-          label="Development Cost"
-          color="#0EA5E9"
-          totalTHB={devDisplay * rate}
-          totalUSD={devDisplay}
-          hint="project / manday"
-        />
-
-        <Row
-          icon="🔗" title="API & Line Development" color="#0EA5E9"
-          badge="manday"
-          subtitle={devNodes.map(n => n.label).join(", ") || "No API or Line nodes"}
-          amountTHB={devDisplay * rate} amountUSD={devDisplay}
-          items={devNodes.map(n => ({ label: n.label, thb: n.monthly * rate }))}
-        />
-
-        {/* Dev cost bar */}
-        <div className="rounded-lg bg-sky-50 border border-sky-100 px-3 py-2 flex justify-between items-center">
-          <div>
-            <div className="text-xs font-semibold text-sky-700">Project Build Cost</div>
-            <div className="text-[10px] text-sky-400">API + Line manday effort</div>
-          </div>
-          <div className="text-right">
-            <div className="text-base font-bold text-sky-600">{fmtTHB(devDisplay * rate)}</div>
-            <div className="text-[10px] text-gray-400">{fmtUSD(devDisplay)}</div>
-          </div>
-        </div>
+        {devUSD > 0 && (<>
+          <SectionHeader
+            label="Development Cost"
+            color="#0EA5E9"
+            primary={fmt(devUSD)}
+            secondary={fmtAlt(devUSD)}
+            hint="project / manday"
+          />
+          <Row
+            icon="🔗" title="API & Line Development" color="#0EA5E9"
+            badge="manday"
+            subtitle={devNodes.map(n => n.label).join(", ") || "No API or Line nodes"}
+            primary={fmt(devUSD)} secondary={fmtAlt(devUSD)}
+            items={devNodes.map(n => ({ label: n.label, amount: fmt(n.monthly) }))}
+          />
+        </>)}
 
         {/* Yearly subscriptions upfront */}
         {subsYearlyUpfrontUSD > 0 && (
@@ -288,12 +279,12 @@ export function SummaryTab({ rate }: { rate: number }) {
                 <div className="text-[10px] text-purple-400">Paid at project start (year 1)</div>
               </div>
               <div className="text-right">
-                <div className="text-base font-bold text-purple-600">{fmtTHB(subsYearlyUpfrontUSD * rate)}</div>
-                <div className="text-[10px] text-gray-400">{fmtUSD(subsYearlyUpfrontUSD)}/yr</div>
+                <div className="text-base font-bold text-purple-600">{fmt(subsYearlyUpfrontUSD)}</div>
+                <div className="text-[10px] text-gray-400">{fmtAlt(subsYearlyUpfrontUSD)}/yr</div>
               </div>
             </div>
             <div className="mt-1.5 pt-1.5 border-t border-purple-100 text-[10px] text-purple-500">
-              ≈ {fmtTHB((subsYearlyUpfrontUSD / 12) * rate)}/mo equivalent after year 1
+              ≈ {fmt(subsYearlyUpfrontUSD / 12)}/mo equivalent after year 1
             </div>
           </div>
         )}
@@ -304,19 +295,19 @@ export function SummaryTab({ rate }: { rate: number }) {
             <SectionHeader
               label="One-time Setup"
               color="#F59E0B"
-              totalTHB={(oneTimeSetup + oneTimeAdd) * rate}
-              totalUSD={oneTimeSetup + oneTimeAdd}
+              primary={fmt(oneTimeSetup + oneTimeAdd)}
+              secondary={fmtAlt(oneTimeSetup + oneTimeAdd)}
             />
             {cost.setupCosts.map((s, i) => (
               <Row key={i} icon="📦" title={s.label} color="#F59E0B"
                 subtitle="Group setup cost"
-                amountTHB={s.amountUSD * rate} amountUSD={s.amountUSD}
+                primary={fmt(s.amountUSD)} secondary={fmtAlt(s.amountUSD)}
                 items={[]} />
             ))}
             {additionalCosts.filter(c => c.billingPeriod === "one-time").map((c, i) => (
               <Row key={i} icon="📦" title={c.label || c.category} color="#F59E0B"
                 subtitle="One-time additional cost"
-                amountTHB={oneTimeAmount(c) * rate} amountUSD={oneTimeAmount(c)}
+                primary={fmt(oneTimeAmount(c))} secondary={fmtAlt(oneTimeAmount(c))}
                 items={[]} />
             ))}
           </>
@@ -325,10 +316,10 @@ export function SummaryTab({ rate }: { rate: number }) {
         {/* ══ GRAND TOTAL (collapsible) ═════════════════════════════════ */}
         {(() => {
           const [open, setOpen] = useState(true);
-          const totalUpfront = devDisplay + subsYearlyUpfrontUSD + (oneTimeSetup + oneTimeAdd);
+          const totalUpfront = devUSD + subsYearlyUpfrontUSD + (oneTimeSetup + oneTimeAdd);
+          const grandTotal = recurringDisplay + devUSD + subsYearlyUpfrontUSD;
           return (
             <div className="rounded-xl bg-gray-900 text-white overflow-hidden">
-              {/* Header — always visible, click to toggle */}
               <button
                 className="w-full flex items-center gap-2 px-4 py-3 hover:bg-white/5 transition-colors"
                 onClick={() => setOpen(v => !v)}
@@ -337,7 +328,7 @@ export function SummaryTab({ rate }: { rate: number }) {
                   <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Cost Summary</div>
                   {!open && (
                     <div className="text-lg font-bold text-white leading-tight whitespace-nowrap mt-0.5">
-                      {fmtTHB((recurringDisplay + devDisplay + subsYearlyUpfrontUSD) * rate)}
+                      {fmt(grandTotal)}
                     </div>
                   )}
                 </div>
@@ -346,62 +337,51 @@ export function SummaryTab({ rate }: { rate: number }) {
 
               {open && (
                 <div className="px-4 pb-3 space-y-1.5 border-t border-white/10">
-                  {/* Recurring */}
                   <div className="flex items-center gap-2 pt-2">
                     <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🏗 Recurring /{periodLabel}</span>
-                    <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(recurringDisplay * rate)}</span>
+                    <span className="font-semibold text-orange-300 text-xs shrink-0 whitespace-nowrap">{fmt(recurringDisplay)}</span>
                   </div>
-                  {period === "monthly" && (
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500 pl-4">
-                      <span className="flex-1">Daily avg</span>
-                      <span className="shrink-0">{fmtTHB((recurringUSD / 30) * rate)}</span>
-                    </div>
-                  )}
-
-                  {/* Dev cost */}
+                  {devUSD > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">🔗 Dev cost (manday)</span>
-                    <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(devDisplay * rate)}</span>
+                    <span className="font-semibold text-sky-300 text-xs shrink-0 whitespace-nowrap">{fmt(devUSD)}</span>
                   </div>
+                  )}
 
-                  {/* Yearly subs upfront */}
                   {subsYearlyUpfrontUSD > 0 && (
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">⚡ Yearly subs (upfront)</span>
-                      <span className="font-semibold text-purple-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB(subsYearlyUpfrontUSD * rate)}</span>
+                      <span className="font-semibold text-purple-300 text-xs shrink-0 whitespace-nowrap">{fmt(subsYearlyUpfrontUSD)}</span>
                     </div>
                   )}
 
-                  {/* One-time */}
                   {(oneTimeSetup + oneTimeAdd) > 0 && (
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400 text-xs min-w-0 flex-1 truncate">📦 One-time setup</span>
-                      <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">{fmtTHB((oneTimeSetup + oneTimeAdd) * rate)}</span>
+                      <span className="font-semibold text-amber-300 text-xs shrink-0 whitespace-nowrap">{fmt(oneTimeSetup + oneTimeAdd)}</span>
                     </div>
                   )}
 
-                  {/* Total */}
                   <div className="border-t border-white/10 pt-2 flex items-center gap-2">
                     <span className="text-sm text-gray-200 font-semibold flex-1">Total Cost</span>
                     <div className="text-right shrink-0">
                       <div className="text-lg font-bold text-white leading-tight whitespace-nowrap">
-                        {fmtTHB((recurringDisplay + devDisplay + subsYearlyUpfrontUSD) * rate)}
+                        {fmt(grandTotal)}
                       </div>
-                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtUSD(recurringDisplay + devDisplay + subsYearlyUpfrontUSD)}</div>
+                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(grandTotal)}</div>
                     </div>
                   </div>
 
-                  {/* Upfront vs recurring breakdown */}
                   {totalUpfront > 0 && (
                     <div className="rounded-lg bg-white/5 px-2.5 py-2 space-y-1 text-[10px]">
                       <div className="text-gray-400 font-semibold uppercase tracking-wide">Payment breakdown</div>
                       <div className="flex justify-between text-gray-300">
                         <span>🏗 Recurring /{periodLabel}</span>
-                        <span>{fmtTHB(recurringDisplay * rate)}</span>
+                        <span>{fmt(recurringDisplay)}</span>
                       </div>
                       <div className="flex justify-between text-amber-300 font-medium">
                         <span>⚡ Upfront at start</span>
-                        <span>{fmtTHB(totalUpfront * rate)}</span>
+                        <span>{fmt(totalUpfront)}</span>
                       </div>
                     </div>
                   )}
@@ -418,72 +398,162 @@ export function SummaryTab({ rate }: { rate: number }) {
           </div>
           <div className="px-3 py-3 space-y-3">
             <label className="text-xs text-gray-600 font-medium flex flex-col gap-1">
-              Selling price to client (THB/{periodLabel})
+              {currency === "thb" ? `Selling price to client (THB/${periodLabel})` : `Selling price to client (USD/${periodLabel})`}
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-gray-400">฿</span>
+                <span className="text-sm text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
                 <input
                   type="number" min={0} step={100}
                   className="flex-1 border rounded px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  value={sellingPriceUSD > 0 ? Math.round(sellingPriceUSD * f * rate) : ""}
+                  value={sellingPriceUSD > 0
+                    ? (currency === "thb"
+                        ? Math.round(sellingPriceUSD * f * rate)
+                        : +(sellingPriceUSD * f).toFixed(2))
+                    : ""}
                   placeholder="0"
                   onChange={(e) => {
-                    const thbPerPeriod = Number(e.target.value);
-                    setSellingPrice(thbPerPeriod / rate / f);
+                    const val = Number(e.target.value);
+                    if (currency === "thb") {
+                      setSellingPrice(val / rate / f);
+                    } else {
+                      setSellingPrice(val / f);
+                    }
                   }}
                 />
               </div>
             </label>
 
             {sellingPriceUSD > 0 && (() => {
-              const totalCostTHB = (recurringDisplay + devDisplay) * rate;
-              const revenueTHB   = sellingDisplay * rate;
-              const profitTHB    = revenueTHB - totalCostTHB;
-              const mg           = revenueTHB > 0 ? (profitTHB / revenueTHB) * 100 : 0;
+              // Always use annual perspective for Year 1 vs Year 2+ comparison
+              const annualRevenue = sellingPriceUSD * 12;
+
+              // Year 1: recurring×12 + dev + yearly subs upfront + one-time setup + one-time add
+              const year1Cost = recurringUSD * 12 + devUSD + subsYearlyUpfrontUSD + oneTimeSetup + oneTimeAdd;
+              const year1Profit = annualRevenue - year1Cost;
+              const year1Margin = annualRevenue > 0 ? (year1Profit / annualRevenue) * 100 : 0;
+
+              // Year 2+: recurring×12 + yearly subs (dev & one-time gone)
+              const year2Cost = recurringUSD * 12 + subsYearlyUpfrontUSD;
+              const year2Profit = annualRevenue - year2Cost;
+              const year2Margin = annualRevenue > 0 ? (year2Profit / annualRevenue) * 100 : 0;
+
               return (
-                <div className="space-y-1.5 pt-1 border-t border-gray-100">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Revenue (selling price)</span>
-                    <span className="font-semibold text-gray-800 whitespace-nowrap">{fmtTHB(revenueTHB)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>– Recurring /{periodLabel}</span>
-                    <span className="whitespace-nowrap">–{fmtTHB(recurringDisplay * rate)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>– Dev cost (project)</span>
-                    <span className="whitespace-nowrap">–{fmtTHB(devDisplay * rate)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm border-t border-gray-100 pt-1.5">
-                    <span className="font-semibold text-gray-700">Profit</span>
-                    <span className={`font-bold text-base whitespace-nowrap ${profitTHB >= 0 ? "text-green-600" : "text-red-500"}`}>
-                      {profitTHB >= 0 ? "+" : ""}{fmtTHB(profitTHB)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-400">Gross margin</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(100, Math.abs(mg))}%`,
-                            background: mg >= 0 ? "#22C55E" : "#EF4444",
-                          }} />
-                      </div>
-                      <span className={`text-sm font-bold ${mg >= 0 ? "text-green-600" : "text-red-500"}`}>
-                        {mg.toFixed(1)}%
-                      </span>
+                <div className="space-y-3 pt-1 border-t border-gray-100">
+                  {/* Annual revenue label */}
+                  <div className="flex justify-between text-sm items-center">
+                    <span className="text-gray-500 font-medium">Annual Revenue</span>
+                    <div className="text-right">
+                      <div className="font-bold text-gray-800 whitespace-nowrap">{fmt(annualRevenue)}</div>
+                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(annualRevenue)}/yr</div>
                     </div>
                   </div>
 
-                  {/* Total to Sell — only when selling price is set */}
-                  <div className="mt-2 rounded-lg bg-green-50 border border-green-100 px-3 py-2 flex justify-between items-center">
+                  {/* Year 1 */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
+                    <div className="px-3 py-2 bg-blue-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">📅 Year 1</span>
+                      <span className="text-[9px] text-blue-500">incl. dev + setup + subs</span>
+                    </div>
+                    <div className="px-3 py-2 space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Recurring /yr</span>
+                        <span className="whitespace-nowrap">–{fmt(recurringUSD * 12)}</span>
+                      </div>
+                      {devUSD > 0 && (
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Dev cost (manday)</span>
+                          <span className="whitespace-nowrap">–{fmt(devUSD)}</span>
+                        </div>
+                      )}
+                      {subsYearlyUpfrontUSD > 0 && (
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Yearly subs (upfront)</span>
+                          <span className="whitespace-nowrap">–{fmt(subsYearlyUpfrontUSD)}</span>
+                        </div>
+                      )}
+                      {(oneTimeSetup + oneTimeAdd) > 0 && (
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>One-time setup</span>
+                          <span className="whitespace-nowrap">–{fmt(oneTimeSetup + oneTimeAdd)}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-blue-200 pt-1.5 flex justify-between items-center">
+                        <span className="text-sm font-bold text-blue-700">Profit</span>
+                        <div className="text-right">
+                          <span className={`text-base font-bold whitespace-nowrap ${year1Profit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            {year1Profit >= 0 ? "+" : ""}{fmt(year1Profit)}
+                          </span>
+                          <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(year1Profit)}</div>
+                        </div>
+                      </div>
+                      {/* Margin bar */}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <span className="text-[10px] text-gray-400 shrink-0">Margin</span>
+                        <div className="flex-1 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, Math.abs(year1Margin))}%`,
+                              background: year1Margin >= 0 ? "#22C55E" : "#EF4444",
+                            }} />
+                        </div>
+                        <span className={`text-xs font-bold shrink-0 ${year1Margin >= 0 ? "text-green-600" : "text-red-500"}`}>
+                          {year1Margin.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Year 2+ */}
+                  <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
+                    <div className="px-3 py-2 bg-green-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-green-700 uppercase tracking-widest">📈 Year 2+</span>
+                      <span className="text-[9px] text-green-500">recurring only</span>
+                    </div>
+                    <div className="px-3 py-2 space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Recurring /yr</span>
+                        <span className="whitespace-nowrap">–{fmt(recurringUSD * 12)}</span>
+                      </div>
+                      {subsYearlyUpfrontUSD > 0 && (
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Yearly subs</span>
+                          <span className="whitespace-nowrap">–{fmt(subsYearlyUpfrontUSD)}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-green-200 pt-1.5 flex justify-between items-center">
+                        <span className="text-sm font-bold text-green-700">Profit</span>
+                        <div className="text-right">
+                          <span className={`text-base font-bold whitespace-nowrap ${year2Profit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            {year2Profit >= 0 ? "+" : ""}{fmt(year2Profit)}
+                          </span>
+                          <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(year2Profit)}</div>
+                        </div>
+                      </div>
+                      {/* Margin bar */}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <span className="text-[10px] text-gray-400 shrink-0">Margin</span>
+                        <div className="flex-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, Math.abs(year2Margin))}%`,
+                              background: year2Margin >= 0 ? "#22C55E" : "#EF4444",
+                            }} />
+                        </div>
+                        <span className={`text-xs font-bold shrink-0 ${year2Margin >= 0 ? "text-green-600" : "text-red-500"}`}>
+                          {year2Margin.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total to Sell */}
+                  <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 flex justify-between items-center">
                     <div>
                       <div className="text-xs font-semibold text-green-700">Total to Sell</div>
-                      <div className="text-[10px] text-green-500">What you charge the client</div>
+                      <div className="text-[10px] text-green-500">What you charge the client /yr</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-base font-bold text-green-700 whitespace-nowrap">{fmtTHB(revenueTHB)}</div>
-                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtUSD(sellingDisplay)}</div>
+                      <div className="text-base font-bold text-green-700 whitespace-nowrap">{fmt(annualRevenue)}</div>
+                      <div className="text-[10px] text-gray-400 whitespace-nowrap">{fmtAlt(annualRevenue)}</div>
                     </div>
                   </div>
                 </div>

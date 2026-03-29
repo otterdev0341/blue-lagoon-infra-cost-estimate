@@ -79,13 +79,21 @@ export interface StickyNoteConfig {
   color: string;
 }
 
+export type CustomBillingType = "monthly" | "onetime_setup" | "subscribe" | "rounding_bill";
+
 export interface CustomServiceConfig {
   description: string;
   region: string;
+  billingType: CustomBillingType;
+  // monthly: pay per request / hour
   costPerRequest?: number;
   requestsPerMonth?: number;
   costPerHour?: number;
   hoursPerMonth?: number;
+  // onetime_setup / subscribe / rounding_bill: flat cost
+  totalCostUSD?: number;
+  // rounding_bill: pay every N years (default 3)
+  intervalYears?: number;
 }
 
 // ── New services ───────────────────────────────────────────────────────────
@@ -257,6 +265,9 @@ export interface Diagram {
   edges: CanvasEdge[];
   stickyNotes: StickyNote[];
   departmentRates?: { id: string; name: string; ratePerManday: number; color: string }[];
+  additionalCosts?: AdditionalCostItem[];
+  subscriptions?: SubscriptionItem[];
+  sellingPriceUSD?: number;
   isTemplate?: boolean;
   createdAt: string;
   updatedAt: string;

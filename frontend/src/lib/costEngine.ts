@@ -7,7 +7,7 @@ import type {
   BillingModel, AWSServiceType,
   EC2Config, S3Config, RDSConfig, LambdaConfig, VPCConfig, ALBConfig, CloudFrontConfig,
   BedrockConfig, EBSConfig, LightsailConfig, CognitoConfig,
-  Route53Config, DynamoDBConfig, RedshiftConfig, GroupConfig,
+  Route53Config, DynamoDBConfig, RedshiftConfig, GroupConfig, CustomServiceConfig,
   DepartmentRate,
 } from "../types.ts";
 
@@ -184,7 +184,24 @@ function nodeC(node: CanvasNode, billing: BillingModel, departmentRates: Departm
   }
 
   if (node.type === "custom") {
-    const c = node.data.config as any;
+    const c = node.data.config as CustomServiceConfig;
+    const billingType = c.billingType ?? "monthly";
+    if (billingType === "onetime_setup") {
+      // One-time cost — not included in monthly recurring
+      return mk(node, "custom", 0, {});
+    }
+    if (billingType === "subscribe") {
+      // Yearly subscription — amortised to monthly equivalent
+      const monthly = (c.totalCostUSD ?? 0) / 12;
+      return mk(node, "custom", monthly, { subscribe: monthly });
+    }
+    if (billingType === "rounding_bill") {
+      // Periodic payment every N years — amortised to monthly equivalent
+      const yrs = Math.max(1, c.intervalYears ?? 3);
+      const monthly = (c.totalCostUSD ?? 0) / (yrs * 12);
+      return mk(node, "custom", monthly, { rounding: monthly });
+    }
+    // monthly (default): pay per request + per hour
     const requestCost = (c.costPerRequest ?? 0) * (c.requestsPerMonth ?? 0);
     const hourCost    = (c.costPerHour ?? 0) * (c.hoursPerMonth ?? 0);
     return mk(node, "custom", requestCost + hourCost, { requests: requestCost, hours: hourCost });

@@ -51,10 +51,13 @@ export const DEFAULT_CONFIGS: Record<AWSServiceType, NodeConfig> = {
   custom: {
     description: "External API call",
     region: "External",
+    billingType: "monthly",
     costPerRequest: 0.000001,
     requestsPerMonth: 1000000,
     costPerHour: 0,
     hoursPerMonth: 0,
+    totalCostUSD: 0,
+    intervalYears: 3,
   },
 
   // ── New services ─────────────────────────────────────────────────────────
