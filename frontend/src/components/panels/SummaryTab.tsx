@@ -252,8 +252,11 @@ interface ThreeYearProps {
   setSellingPrice:      (v: number) => void;
   year2SellingPriceUSD: number;
   setYear2SellingPrice: (v: number) => void;
-  year1Cost:     number;
-  year2PlusCost: number;
+  year1Cost:      number;
+  year2PlusCost:  number;
+  monthlyAnnual:  number;
+  yearlyPayment:  number;
+  onetimePayment: number;
   currency: Currency;
   rate:     number;
   fmt:      (usd: number) => string;
@@ -263,6 +266,7 @@ function ThreeYearTable({
   sellingPriceUSD, setSellingPrice,
   year2SellingPriceUSD, setYear2SellingPrice,
   year1Cost, year2PlusCost,
+  monthlyAnnual, yearlyPayment, onetimePayment,
   currency, rate, fmt, fmtAlt,
 }: ThreeYearProps) {
   // Year 1 = project fee + MA (MA applies from Year 1)
@@ -303,6 +307,7 @@ function ThreeYearTable({
           const profit = yr.revenue - yr.cost;
           const margin = yr.revenue > 0 ? (profit / yr.revenue) * 100 : 0;
           const isPos  = profit >= 0;
+          const isYear1 = i === 0;
           return (
             <div key={i} className="rounded-2xl border-2 overflow-hidden flex flex-col"
               style={{ borderColor: yr.border, background: yr.bg }}>
@@ -314,13 +319,35 @@ function ThreeYearTable({
               </div>
               {/* Body */}
               <div className="px-4 py-3 flex-1 space-y-2">
+                {/* Revenue */}
                 <div className="flex justify-between text-xs text-gray-500">
                   <span>Revenue /yr</span>
                   <span className="font-medium text-gray-700">{yr.revenue > 0 ? fmt(yr.revenue) : "—"}</span>
                 </div>
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Cost /yr</span>
-                  <span className="font-medium text-red-400">–{fmt(yr.cost)}</span>
+                {/* Cost breakdown */}
+                <div className="space-y-0.5">
+                  {isYear1 && onetimePayment > 0 && (
+                    <div className="flex justify-between text-[10px] text-gray-400">
+                      <span>↳ One-time setup</span>
+                      <span className="text-amber-500">–{fmt(onetimePayment)}</span>
+                    </div>
+                  )}
+                  {yearlyPayment > 0 && (
+                    <div className="flex justify-between text-[10px] text-gray-400">
+                      <span>↳ Yearly subs/infra</span>
+                      <span className="text-indigo-400">–{fmt(yearlyPayment)}</span>
+                    </div>
+                  )}
+                  {monthlyAnnual > 0 && (
+                    <div className="flex justify-between text-[10px] text-gray-400">
+                      <span>↳ Monthly × 12</span>
+                      <span className="text-blue-400">–{fmt(monthlyAnnual)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs text-gray-500 pt-0.5 border-t" style={{ borderColor: yr.border }}>
+                    <span>Cost /yr</span>
+                    <span className="font-medium text-red-400">–{fmt(yr.cost)}</span>
+                  </div>
                 </div>
                 <div className="border-t pt-2" style={{ borderColor: yr.border }}>
                   <div className="flex justify-between items-baseline">
@@ -689,6 +716,9 @@ export function SummaryTab({ rate }: { rate: number }) {
               setYear2SellingPrice={setYear2SellingPrice}
               year1Cost={year1Cost}
               year2PlusCost={year2PlusCost}
+              monthlyAnnual={monthlyAnnual}
+              yearlyPayment={yearlyPayment}
+              onetimePayment={onetimePayment}
               currency={currency}
               rate={rate}
               fmt={fmt}
