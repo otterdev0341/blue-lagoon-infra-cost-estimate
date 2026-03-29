@@ -163,7 +163,7 @@ export function SummaryTab({ rate }: { rate: number }) {
     .filter(s => s.billingPeriod === "yearly")
     .reduce((sum, s) => sum + subYearlyUpfront(s), 0);
 
-  const periodLabel = period === "daily" ? "day" : period === "yearly" ? "yr" : "mo";
+  const periodLabel = period === "yearly" ? "yr" : "mo";
 
   return (
     <div className="flex flex-col h-full">
