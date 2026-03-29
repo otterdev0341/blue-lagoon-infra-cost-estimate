@@ -263,7 +263,8 @@ REST, gRPC, MCP, JOLT, Adapter, LLM
 - Input validated with Zod on all API endpoints
 
 ### 5.4 Portability
-- Runs locally with zero external dependencies (SQLite mode)
+- Runs locally with **zero external dependencies** — SQLite is built into Bun; no database server required
+- DB backend selected automatically: no `MONGODB_URI` → SQLite; `MONGODB_URI` set → MongoDB
 - Single Docker container for production deployment
 - No vendor lock-in on the backend framework
 
@@ -280,7 +281,7 @@ REST, gRPC, MCP, JOLT, Adapter, LLM
 | Canvas library | React Flow (@xyflow/react) | Best-in-class for node-graph UIs in React; handles drag, resize, edges, grouping |
 | State management | Zustand | Lightweight, minimal boilerplate; sufficient for canvas state without Redux complexity |
 | Backend framework | Hono on Bun | Sub-millisecond cold start; Bun's native TypeScript support eliminates build step |
-| Local DB | SQLite + Drizzle | Zero-config local dev; no Docker dependency for contributors |
+| Local DB | SQLite via `bun:sqlite` | Zero-config local dev; built into Bun — no extra package, no migrations CLI, tables created on first start |
 | Production DB | MongoDB + Mongoose | Flexible schema for canvas JSON blobs; Atlas managed service reduces ops overhead |
 | Deployment | Single container | Simplifies PaaS deployment; no reverse proxy or orchestration needed for early stages |
 

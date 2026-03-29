@@ -5,7 +5,8 @@ A visual, drag-and-drop AWS infrastructure cost estimator with a canvas-based di
 ![Tech Stack](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)
 ![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react)
 ![Hono](https://img.shields.io/badge/Backend-Hono-E36002)
-![MongoDB](https://img.shields.io/badge/Database-MongoDB-47A248?logo=mongodb)
+![SQLite](https://img.shields.io/badge/DB%20(local)-SQLite-003B57?logo=sqlite)
+![MongoDB](https://img.shields.io/badge/DB%20(prod)-MongoDB-47A248?logo=mongodb)
 ![Docker](https://img.shields.io/badge/Deploy-Docker-2496ED?logo=docker)
 
 ---
@@ -15,7 +16,8 @@ A visual, drag-and-drop AWS infrastructure cost estimator with a canvas-based di
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Local Development (SQLite)](#local-development-sqlite)
+- [Prerequisite Check Scripts](#prerequisite-check-scripts)
+- [Local Development (SQLite — zero config)](#local-development-sqlite--zero-config)
 - [Production Deployment (MongoDB + Docker)](#production-deployment-mongodb--docker)
 - [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
@@ -158,7 +160,7 @@ Track third-party SaaS tools:
 | **Runtime** | [Bun](https://bun.sh) 1.1 | Backend execution, fast JS/TS runtime |
 | **Backend Framework** | [Hono](https://hono.dev) 4 | Lightweight web framework, zero-dependency router |
 | **API Validation** | [Zod](https://zod.dev) | Request body schema validation |
-| **DB (Dev)** | SQLite + Drizzle ORM | Local file-based database, zero config |
+| **DB (Dev)** | SQLite via `bun:sqlite` | Built into Bun — zero extra dependencies, file-based, auto-created |
 | **DB (Prod)** | MongoDB + Mongoose | Cloud-hosted document database (Atlas) |
 | **Frontend** | [React](https://react.dev) 18 | UI library |
 | **Routing** | [React Router](https://reactrouter.com) v7 | Client-side navigation |
@@ -184,20 +186,27 @@ blue-lagoon-infra-cost-estimate/
 ├── start.sh                      # Local dev launcher
 ├── stop.sh                       # Local dev stopper
 │
+├── scripts/
+│   ├── check-deps.sh             # Prerequisite checker — macOS / Linux
+│   ├── check-deps.ps1            # Prerequisite checker — Windows PowerShell
+│   └── check-deps.bat            # Prerequisite checker — Windows CMD
+│
 ├── backend/
 │   ├── package.json
-│   ├── .env.example              # Environment template
-│   ├── drizzle.config.ts         # SQLite/Drizzle config (local dev)
+│   ├── .env.example              # Environment variable template
 │   ├── data/
-│   │   └── app.db                # SQLite file (auto-created locally)
+│   │   └── app.db                # SQLite file (auto-created on first run)
 │   └── src/
-│       ├── index.ts              # Server entry (Hono + Bun.serve)
+│       ├── index.ts              # Server entry — auto-selects SQLite or MongoDB
 │       ├── types.ts              # Shared TypeScript types
 │       ├── db/
-│       │   ├── client.ts         # MongoDB connection (Mongoose)
-│       │   ├── schema.ts         # Mongoose models
-│       │   ├── queries.ts        # All DB query functions
-│       │   └── migrate.ts        # Index/migration runner
+│       │   ├── index.ts          # DB router — picks SQLite or MongoDB at startup
+│       │   ├── client.ts         # MongoDB connection (Mongoose) — skipped if no URI
+│       │   ├── schema.ts         # Mongoose models (production)
+│       │   ├── queries.ts        # MongoDB query functions
+│       │   ├── sqliteClient.ts   # bun:sqlite setup + table creation (local dev)
+│       │   ├── sqliteQueries.ts  # SQLite query functions (same interface as queries.ts)
+│       │   └── migrate.ts        # MongoDB index runner (production only)
 │       ├── cost/
 │       │   └── calculator.ts     # AWS cost calculation engine
 │       ├── pricing/
@@ -235,31 +244,76 @@ blue-lagoon-infra-cost-estimate/
 
 ---
 
-## Local Development (SQLite)
+## Prerequisite Check Scripts
 
-Local development uses **SQLite** as the database — no external services required.
+Before you begin, run the check script for your OS to verify all required tools are installed.
+
+### macOS / Linux
+
+```bash
+bash scripts/check-deps.sh
+```
+
+### Windows (PowerShell — recommended)
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File scripts\check-deps.ps1
+```
+
+### Windows (Command Prompt)
+
+```bat
+scripts\check-deps.bat
+```
+
+The scripts check for:
+- **Bun** ≥ 1.1
+- **Node.js** ≥ 18 + **npm**
+- **Git**
+- **Docker** (optional — only needed for production builds)
+- Ports **3001** and **5173** are free
+
+---
+
+## Local Development (SQLite — zero config)
+
+The backend automatically uses **SQLite** (`bun:sqlite`, built into Bun) when `MONGODB_URI` is **not** set.
+No database installation, no configuration file required — just clone and run.
 
 ### Prerequisites
 
-- **Bun** ≥ 1.1 — [install](https://bun.sh/docs/installation)
-- **Node.js** ≥ 18 — needed for `npm` (frontend build tooling)
+| Tool | Min Version | Install |
+|------|-------------|---------|
+| **Bun** | 1.1 | [bun.sh](https://bun.sh/docs/installation) |
+| **Node.js** | 18 | [nodejs.org](https://nodejs.org) or `nvm install 20` |
+| **Git** | any | [git-scm.com](https://git-scm.com) |
 
-### Quick Start
+### Step 1 — Clone
 
 ```bash
-# Clone the repository
 git clone https://github.com/your-org/blue-lagoon-infra-cost-estimate.git
 cd blue-lagoon-infra-cost-estimate
+```
 
-# Start both backend + frontend in one command
+### Step 2 — Check prerequisites (optional but recommended)
+
+```bash
+bash scripts/check-deps.sh   # macOS / Linux
+# OR
+scripts\check-deps.bat       # Windows CMD
+```
+
+### Step 3 — Start (one command)
+
+```bash
 ./start.sh
 ```
 
-`start.sh` will automatically:
-1. Install all dependencies (`npm install` for frontend, `bun install` for backend)
-2. Run SQLite migrations via Drizzle
-3. Start the backend on **http://localhost:3001**
-4. Start the frontend dev server on **http://localhost:5173**
+`start.sh` automatically:
+1. Installs backend deps via `npm install`
+2. Installs frontend deps via `npm install`
+3. Starts the backend on **http://localhost:3001** (SQLite DB auto-created at `backend/data/app.db`)
+4. Starts the frontend Vite dev server on **http://localhost:5173**
 
 Open **http://localhost:5173** in your browser.
 
@@ -268,51 +322,59 @@ To stop all servers:
 ./stop.sh
 ```
 
-### Manual Start (without start.sh)
+### Manual Start (two terminals)
 
 ```bash
-# Terminal 1 — Backend
+# Terminal 1 — Backend  (SQLite, no MONGODB_URI → auto-detected)
 cd backend
-bun run dev         # Starts with --watch on :3001
+npm install
+bun run dev        # Starts with --watch on :3001
 
 # Terminal 2 — Frontend
 cd frontend
-bun run dev         # Vite dev server on :5173
-                    # /api requests proxied to :3001
+npm install
+npm run dev        # Vite dev server on :5173 (proxies /api → :3001)
 ```
 
 ### SQLite Database
 
-The SQLite database file is created automatically at `backend/data/app.db` on first run. No configuration needed.
-
-To reset the database:
-```bash
-rm backend/data/app.db
-# Restart the backend — migrations run automatically on startup
-```
+| | |
+|---|---|
+| **Location** | `backend/data/app.db` |
+| **Created** | Automatically on first backend start |
+| **No migrations needed** | Tables are created via `CREATE TABLE IF NOT EXISTS` on startup |
+| **Reset DB** | `rm backend/data/app.db` then restart backend |
+| **Custom path** | Set `SQLITE_PATH=/your/path/app.db` env var |
 
 ### Local Environment Variables
 
-Create `backend/.env` (optional for local — all have defaults):
+No `.env` file is required for local dev. All values have sensible defaults.
+
+If you want to customise, create `backend/.env`:
 
 ```env
 PORT=3001
 NODE_ENV=development
-# SQLite path (optional, defaults to backend/data/app.db)
+
+# Optional: change SQLite file location
 # SQLITE_PATH=./data/app.db
+
+# Leave MONGODB_URI unset to use SQLite (local mode)
+# MONGODB_URI=mongodb+srv://...   ← set this only for MongoDB
 ```
 
 ---
 
 ## Production Deployment (MongoDB + Docker)
 
-Production uses **MongoDB** (Atlas recommended) and runs as a single Docker container serving both the API and the built frontend.
+When `MONGODB_URI` is set, the backend automatically switches to **MongoDB** (no code changes needed).
+Production runs as a single Docker container serving both the API and the built frontend.
 
-### 1. Set Up MongoDB Atlas
+### 1. Set Up MongoDB Atlas (free tier available)
 
 1. Create a free cluster at [cloud.mongodb.com](https://cloud.mongodb.com)
 2. Create a **database user** (username + password)
-3. In **Network Access**, add `0.0.0.0/0` to allow connections from your deployment host
+3. In **Network Access**, add `0.0.0.0/0` to allow your deployment host
 4. Copy your **connection string**:
    ```
    mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
@@ -324,17 +386,10 @@ Production uses **MongoDB** (Atlas recommended) and runs as a single Docker cont
 docker build -t blue-lagoon-infra .
 ```
 
-The Dockerfile uses a two-stage build:
-
-| Stage | Image | Purpose |
-|-------|-------|---------|
+| Stage | Base Image | Purpose |
+|-------|-----------|---------|
 | `builder` | `node:20-alpine` | Install frontend deps + `npm run build` |
 | `runtime` | `oven/bun:1.1-alpine` | Run backend + serve built frontend |
-
-The final image contains:
-- Backend source (`/app/src`)
-- Built frontend static files (`/app/public`)
-- Backend dependencies only (no dev deps, no node_modules bloat)
 
 ### 3. Run with Docker
 
@@ -349,18 +404,16 @@ docker run -d \
   blue-lagoon-infra
 ```
 
-Open **http://localhost:3001** — both the frontend and API are served from the same port.
+Open **http://localhost:3001** — frontend and API served from the same port.
 
 ### 4. Deploy to Koyeb
 
-1. Push your image to Docker Hub or GHCR:
+1. Push to Docker Hub / GHCR:
    ```bash
    docker tag blue-lagoon-infra your-dockerhub/blue-lagoon-infra:latest
    docker push your-dockerhub/blue-lagoon-infra:latest
    ```
-
-2. In Koyeb dashboard → **Create Service** → **Docker image**
-
+2. In Koyeb → **Create Service** → **Docker image**
 3. Set environment variables:
 
    | Key | Value |
@@ -371,24 +424,14 @@ Open **http://localhost:3001** — both the frontend and API are served from the
    | `PORT` | `3001` |
 
 4. Set **exposed port** to `3001`
-
-5. Koyeb health check uses: `GET /health` — make sure port 3001 is open
+5. Health check endpoint: `GET /health`
 
 ### 5. Health Check
 
-The container runs a built-in health check:
-
 ```
 GET /health
-```
-
-Response:
-```json
-{
-  "status": "ok",
-  "db": "connected",
-  "timestamp": "2025-01-01T00:00:00.000Z"
-}
+→ { "status": "ok", "db": "mongodb", "ts": "..." }   ← production
+→ { "status": "ok", "db": "sqlite",  "ts": "..." }   ← local dev
 ```
 
 ---
@@ -397,13 +440,14 @@ Response:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MONGODB_URI` | **Prod only** | — | Full MongoDB connection string |
+| `MONGODB_URI` | **Prod only** | *(unset)* | MongoDB Atlas connection string. **If unset, SQLite is used automatically.** |
 | `MONGODB_DB` | No | `infra_canvas` | MongoDB database name |
+| `SQLITE_PATH` | No | `./data/app.db` | Path to SQLite file (local dev only) |
 | `PORT` | No | `3001` | HTTP server port |
-| `NODE_ENV` | No | `development` | Set to `production` in containers |
-| `WEB_ORIGIN` | No | `http://localhost:5173` (dev) / `*` (prod) | CORS allowed origin |
+| `NODE_ENV` | No | `development` | Set to `production` in Docker |
+| `WEB_ORIGIN` | No | `http://localhost:5173` | CORS allowed origin (dev) / `*` (prod) |
 
-Copy the example file to get started:
+Copy the example file:
 ```bash
 cp backend/.env.example backend/.env
 ```
@@ -485,19 +529,24 @@ All endpoints are prefixed with `/api`.
 User drags node → CanvasBoard (React Flow)
      └── Zustand store update
           ├── CostPanel recalculates (client-side costEngine.ts)
-          └── useAutoSave debounce → PATCH /api/diagrams/:id/canvas → MongoDB
+          └── useAutoSave debounce → PATCH /api/diagrams/:id/canvas
+                                          └── SQLite (local) or MongoDB (prod)
 ```
 
 ### Database: Local vs Production
 
+The DB backend is selected **automatically** at startup — no code changes needed.
+
 | | Local Development | Production |
 |--|--|--|
-| **Database** | SQLite | MongoDB Atlas |
+| **Trigger** | `MONGODB_URI` **not set** | `MONGODB_URI` **set** |
+| **Database** | SQLite (`bun:sqlite`) | MongoDB Atlas |
 | **Location** | `backend/data/app.db` | Cloud (Atlas cluster) |
-| **ORM / Driver** | Drizzle ORM | Mongoose |
-| **Setup** | Auto (migrations on start) | Manual (Atlas cluster + env var) |
-| **Migrations** | `drizzle-kit push` | Mongoose creates indexes |
-| **Reset** | Delete `app.db` file | Drop collections in Atlas |
+| **Driver** | Built into Bun — zero deps | Mongoose |
+| **Setup** | None — tables created on first run | Atlas cluster + env var |
+| **Migrations** | `CREATE TABLE IF NOT EXISTS` on startup | Mongoose `createIndexes()` |
+| **Reset** | `rm backend/data/app.db` | Drop collections in Atlas UI |
+| **Health check `db` field** | `"sqlite"` | `"mongodb"` |
 
 ---
 

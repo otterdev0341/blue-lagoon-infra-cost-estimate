@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   listDiagrams, getDiagram, createDiagram, updateDiagram, updateDiagramCanvas,
   deleteDiagram, getSnapshots, setDiagramTemplate, createNamedSnapshot, restoreSnapshot,
-} from "../db/queries.ts";
+} from "../db/index.ts";
 import { calculateDiagramCost } from "../cost/calculator.ts";
 import type { BillingModel } from "../types.ts";
 

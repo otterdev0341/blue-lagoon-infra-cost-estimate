@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# start.sh  —  AWS Infra Canvas
-# Installs deps, generates + applies Drizzle migrations, starts both servers.
+# start.sh  —  Blue Lagoon Infra Cost Estimator
+#
+# Installs deps and starts both backend (bun) + frontend (Vite) servers.
+# DB selection is automatic:
+#   • MONGODB_URI set  → MongoDB (production/cloud)
+#   • MONGODB_URI unset → bun:sqlite at backend/data/app.db (local dev, zero config)
+#
 # Usage:  ./start.sh
+# Stop:   ./stop.sh
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -38,8 +44,6 @@ fi
 info "bun $(bun --version)"
 
 # ── locate npm ───────────────────────────────────────────────────────────────
-# bun install has a broken tempdir on this machine (bun #9887).
-# We use npm for package installation; bun is still used to run the servers.
 NPM_BIN=""
 for _c in \
     "$(command -v npm 2>/dev/null)" \
@@ -49,9 +53,6 @@ for _c in \
   if [ -x "$_c" ]; then NPM_BIN="$_c"; break; fi
 done
 
-# install_deps DIR NAME
-# Uses npm install --no-package-lock so it installs directly into DIR/node_modules
-# without being influenced by any parent workspace package.json.
 install_deps() {
   local DIR="$1" NAME="$2"
   info "Installing $NAME deps via npm…"
@@ -59,9 +60,6 @@ install_deps() {
     err "npm not found. Install Node: https://nodejs.org"
     exit 1
   fi
-  # --no-package-lock    → don't create/use npm lockfile (bun.lockb is the source of truth)
-  # --no-workspaces      → ignore parent workspace config, install into this dir only
-  # --loglevel=error     → suppress noisy npm output
   (cd "$DIR" && "$NPM_BIN" install --no-package-lock --no-workspaces --loglevel=error)
   info "$NAME deps ready."
 }
@@ -69,7 +67,7 @@ install_deps() {
 mkdir -p "$LOG_DIR"
 
 # ── 1. install dependencies ──────────────────────────────────────────────────
-section "1/4  Dependencies"
+section "1/3  Dependencies"
 
 if [ ! -d "$ROOT/backend/node_modules" ]; then
   install_deps "$ROOT/backend" "backend"
@@ -83,44 +81,31 @@ else
   info "Frontend deps already installed."
 fi
 
-# ── 2. ensure data directory ─────────────────────────────────────────────────
-section "2/4  Database directory"
+# ── 2. database setup ────────────────────────────────────────────────────────
+section "2/3  Database"
 
-DB_PATH="${SQLITE_PATH:-$ROOT/backend/data/app.db}"
-DB_DIR="$(dirname "$DB_PATH")"
-mkdir -p "$DB_DIR"
-
-if [ -f "$DB_PATH" ]; then
-  info "Database found: $DB_PATH"
+if [ -n "${MONGODB_URI:-}" ]; then
+  info "MONGODB_URI is set → will use MongoDB"
 else
-  warn "Database not found — will be created by migration."
+  DB_PATH="${SQLITE_PATH:-$ROOT/backend/data/app.db}"
+  DB_DIR="$(dirname "$DB_PATH")"
+  mkdir -p "$DB_DIR"
+  if [ -f "$DB_PATH" ]; then
+    info "SQLite database found: $DB_PATH"
+  else
+    info "SQLite database will be created on first run: $DB_PATH"
+  fi
 fi
 
-# ── 3. generate & apply Drizzle migrations ───────────────────────────────────
-section "3/4  Drizzle migrations"
-
-DRIZZLE_DIR="$ROOT/backend/drizzle"
-
-if [ ! -d "$DRIZZLE_DIR" ] || [ -z "$(ls -A "$DRIZZLE_DIR" 2>/dev/null)" ]; then
-  info "No migration files found — generating from schema…"
-  (cd "$ROOT/backend" && SQLITE_PATH="$DB_PATH" bun run db:generate)
-else
-  info "Migration files exist in drizzle/"
-fi
-
-info "Applying migrations…"
-(cd "$ROOT/backend" && SQLITE_PATH="$DB_PATH" bun run db:migrate)
-info "Database is up to date."
-
-# ── 4. start servers ─────────────────────────────────────────────────────────
-section "4/4  Starting servers"
+# ── 3. start servers ─────────────────────────────────────────────────────────
+section "3/3  Starting servers"
 
 info "Starting backend  (log → $BACKEND_LOG)"
-(cd "$ROOT/backend" && SQLITE_PATH="$DB_PATH" bun run dev >> "$BACKEND_LOG" 2>&1) &
+(cd "$ROOT/backend" && bun run dev >> "$BACKEND_LOG" 2>&1) &
 BACKEND_PID=$!
 
 info "Starting frontend (log → $FRONTEND_LOG)"
-(cd "$ROOT/frontend" && bun run dev >> "$FRONTEND_LOG" 2>&1) &
+(cd "$ROOT/frontend" && "${NPM_BIN:-npm}" run dev >> "$FRONTEND_LOG" 2>&1) &
 FRONTEND_PID=$!
 
 # Wait a moment to catch immediate crashes
@@ -141,12 +126,15 @@ fi
 printf '%s\n%s\n' "$BACKEND_PID" "$FRONTEND_PID" > "$PIDS_FILE"
 
 # ── summary ───────────────────────────────────────────────────────────────────
+DB_LABEL="${MONGODB_URI:+MongoDB}"
+DB_LABEL="${DB_LABEL:-SQLite (${SQLITE_PATH:-backend/data/app.db})}"
+
 echo ""
 echo -e "${GREEN}${BOLD}✅  Both servers running${RESET}"
 echo ""
 echo -e "   🌐  Frontend  →  ${BOLD}http://localhost:5173${RESET}"
 echo -e "   ⚙️   Backend   →  ${BOLD}http://localhost:3001${RESET}"
-echo -e "   🗄   Database  →  ${BOLD}$DB_PATH${RESET}"
+echo -e "   🗄   Database  →  ${BOLD}$DB_LABEL${RESET}"
 echo ""
 echo -e "   Logs:  tail -f $LOG_DIR/*.log"
 echo -e "   Stop:  ./stop.sh"

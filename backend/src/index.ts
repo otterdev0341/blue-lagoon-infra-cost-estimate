@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
-import { connectDB } from "./db/client.ts";
+import { connectDB, useMongo } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
 import diagramsRoute from "./routes/diagrams.ts";
 import pricingRoute from "./routes/pricing.ts";
@@ -9,9 +9,11 @@ import pricingRoute from "./routes/pricing.ts";
 const isProd = process.env.NODE_ENV === "production";
 
 async function main() {
-  // Connect to MongoDB and ensure indexes
+  // Connect to DB:
+  //   MONGODB_URI set  → MongoDB (production / cloud)
+  //   MONGODB_URI unset → bun:sqlite (local dev, zero config)
   await connectDB();
-  await runMigrations();
+  if (useMongo) await runMigrations();
 
   const app = new Hono();
 
@@ -27,7 +29,11 @@ async function main() {
 
   // Health check
   app.get("/health", (c) =>
-    c.json({ status: "ok", db: "mongodb+mongoose", ts: new Date().toISOString() })
+    c.json({
+      status: "ok",
+      db: useMongo ? "mongodb" : "sqlite",
+      ts: new Date().toISOString(),
+    })
   );
 
   // API routes
@@ -43,12 +49,11 @@ async function main() {
 
   const PORT = Number(process.env.PORT ?? 3001);
 
-  // Use Bun.serve() directly so the HTTP listener binds immediately
-  // (export default with a Promise does NOT start the server in Bun)
   Bun.serve({ port: PORT, fetch: app.fetch });
 
+  const dbLabel = useMongo ? "MongoDB + Mongoose" : "SQLite (bun:sqlite)";
   console.log(`\n🚀  Server  →  http://localhost:${PORT}`);
-  console.log(`   DB      →  MongoDB + Mongoose`);
+  console.log(`   DB      →  ${dbLabel}`);
   console.log(`   Mode    →  ${isProd ? "production (serving static frontend)" : "development"}\n`);
 }
 
