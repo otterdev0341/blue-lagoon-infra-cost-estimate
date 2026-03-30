@@ -255,20 +255,28 @@ export const GroupNode = memo(function GroupNode({ id, data, selected }: NodePro
       </div>
 
       {/* Cost badge — bottom right */}
-      {(d.childrenCost !== undefined && d.childrenCost > 0) && (
-        <div
-          className="absolute bottom-2 right-3 text-right"
-          style={{ pointerEvents: "none" }}
-        >
-          <div className="text-xs font-semibold" style={{ color: style.border }}>
-            {fmtUSD(d.childrenCost)}
-            <span className="text-[10px] font-normal opacity-60">/mo</span>
+      {(d.childrenCost !== undefined && d.childrenCost > 0) && (() => {
+        const displayCost = billingType === "yearly"  ? d.childrenCost * 12
+                          : billingType === "onetime" ? d.childrenCost
+                          : d.childrenCost; // monthly
+        const suffix      = billingType === "yearly"  ? "/yr"
+                          : billingType === "onetime" ? ""
+                          : "/mo";
+        return (
+          <div
+            className="absolute bottom-2 right-3 text-right"
+            style={{ pointerEvents: "none" }}
+          >
+            <div className="text-xs font-semibold" style={{ color: style.border }}>
+              {fmtUSD(displayCost)}
+              <span className="text-[10px] font-normal opacity-60">{suffix}</span>
+            </div>
+            <div className="text-[10px] opacity-50" style={{ color: style.border }}>
+              {fmtTHB(displayCost * exchangeRate)}
+            </div>
           </div>
-          <div className="text-[10px] opacity-50" style={{ color: style.border }}>
-            {fmtTHB(d.childrenCost * exchangeRate)}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Setup cost badge */}
       {setupUSD > 0 && (
