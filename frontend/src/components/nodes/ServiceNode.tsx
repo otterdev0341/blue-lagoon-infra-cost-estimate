@@ -82,6 +82,12 @@ export const ServiceNode = memo(function ServiceNode({ id, data, selected }: Nod
             )}
           </div>
 
+          {(d.config as any)?.description && (
+            <div className="text-[11px] text-gray-400 italic leading-tight">
+              {(d.config as any).description}
+            </div>
+          )}
+
           {d.hasAutoScaling && (
             <div className="text-xs text-blue-600 font-medium">
               ⚖️ ASG: {(d.config as any).autoScaling?.minCapacity ?? "?"} → {(d.config as any).autoScaling?.desiredCapacity ?? "?"} → {(d.config as any).autoScaling?.maxCapacity ?? "?"}
