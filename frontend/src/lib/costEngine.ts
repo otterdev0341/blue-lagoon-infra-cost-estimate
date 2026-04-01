@@ -115,7 +115,12 @@ function nodeC(node: CanvasNode, billing: BillingModel, departmentRates: Departm
 
   if (node.type === "ec2") {
     const c = node.data.config as EC2Config;
-    const h = (EC2_HOURLY[c.instanceType] ?? 0.10) * rm * bf;
+    const TENANCY_MULT: Record<string, number> = { shared: 1.0, dedicated: 1.1, host: 2.0 };
+    const tenancyMult = TENANCY_MULT[c.tenancy ?? "shared"] ?? 1.0;
+    // costPerHourOverride replaces the fully-computed hourly rate (no extra multipliers applied)
+    const h = c.costPerHourOverride !== undefined
+      ? c.costPerHourOverride
+      : (EC2_HOURLY[c.instanceType] ?? 0.10) * rm * bf * tenancyMult;
     const compute = h * c.utilizationHours;
     const ebs = c.ebsVolumeGb * (EBS_PRICE[c.ebsType] ?? 0.08);
     const perInst = compute + ebs;

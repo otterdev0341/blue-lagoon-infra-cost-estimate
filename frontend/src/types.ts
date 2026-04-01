@@ -22,6 +22,8 @@ export interface AutoScalingConfig {
   threshold?: number;
 }
 
+export type EC2Tenancy = "shared" | "dedicated" | "host";
+
 export interface EC2Config {
   instanceType: string;
   count: number;
@@ -29,6 +31,8 @@ export interface EC2Config {
   utilizationHours: number;
   ebsVolumeGb: number;
   ebsType: "gp3" | "gp2" | "io1" | "st1" | "sc1";
+  tenancy?: EC2Tenancy;
+  costPerHourOverride?: number;  // override computed hourly rate (USD/hr)
   autoScaling?: AutoScalingConfig;
   description?: string;
 }

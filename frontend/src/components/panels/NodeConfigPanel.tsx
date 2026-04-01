@@ -531,9 +531,22 @@ export function NodeConfigPanel({ nodeId, onClose }: Props) {
         {field("Instance Type", sel("instanceType", INSTANCE_TYPES))}
         {field("Count", inp("count", "number", { min: 1 }))}
         {field("OS", sel("operatingSystem", ["Linux", "Windows", "RHEL"]))}
+        {field("Tenancy", sel("tenancy", ["shared", "dedicated", "host"]))}
         {field("Utilization Hours/mo", inp("utilizationHours", "number", { min: 1 }))}
         {field("EBS Volume (GB)", inp("ebsVolumeGb", "number", { min: 1 }))}
         {field("EBS Type", sel("ebsType", ["gp3", "gp2", "io1", "st1", "sc1"]))}
+        {field("Hourly Rate Override (USD/hr)",
+          <input
+            type="number" min={0} step={0.001}
+            className="border rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-400"
+            value={(cfg as any).costPerHourOverride ?? ""}
+            placeholder="Auto (from instance type)"
+            onChange={(e) => {
+              const v = e.target.value;
+              updateNodeConfig(nodeId, { costPerHourOverride: v === "" ? undefined : Number(v) } as any);
+            }}
+          />
+        )}
         <hr className="border-gray-100" />
         {sectionTitle("Auto Scaling")}
         {chk("autoScaling.enabled", "Enable ASG")}

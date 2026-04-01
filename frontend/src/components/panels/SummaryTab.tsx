@@ -102,101 +102,186 @@ function Row({ icon, title, subtitle, primary, secondary, color, badge, items }:
   );
 }
 
-// ── Year 1 "What to pay" card ─────────────────────────────────────────────────
+// ── Year 1 P&L card ───────────────────────────────────────────────────────────
 
 interface Year1CardProps {
-  monthlyAnnual:  number;   // monthly groups × 12 + ungrouped × 12 + add + subs
-  yearlyPayment:  number;   // yearly groups total (already ×12)
-  onetimePayment: number;   // onetime groups + dev + one-time add
+  implCost:        number;  // one-time: dev + setup
+  infraAnnual:     number;  // recurring infra /yr (excl. MA)
+  maCostAnnual:    number;  // MA cost /yr (maintain category)
+  implFeeAnnual:   number;  // implementation fee charged to client (one-time)
+  serviceRevAnnual:number;  // subscription + monthly service /yr
+  maFeeAnnual:     number;  // MA fee from client /yr
   fmt:    (usd: number) => string;
   fmtAlt: (usd: number) => string;
 }
-function Year1Card({ monthlyAnnual, yearlyPayment, onetimePayment, fmt, fmtAlt }: Year1CardProps) {
-  const total = monthlyAnnual + yearlyPayment + onetimePayment;
+function Year1Card({ implCost, infraAnnual, maCostAnnual, implFeeAnnual, serviceRevAnnual, maFeeAnnual, fmt, fmtAlt }: Year1CardProps) {
+  const totalCost = implCost + infraAnnual + maCostAnnual;
+  const totalRev  = implFeeAnnual + serviceRevAnnual + maFeeAnnual;
+  const profit    = totalRev - totalCost;
+  const margin    = totalRev > 0 ? (profit / totalRev) * 100 : 0;
+  const isPos     = profit >= 0;
+
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#0F172A" }}>
-      <div className="px-4 pt-3 pb-1">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5">
-          💸 What to Pay — Year 1
+      <div className="px-4 pt-3 pb-2">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+          Year 1 — Cost vs Revenue
         </div>
 
-        {onetimePayment > 0 && (
-          <div className="flex justify-between items-center py-1.5 border-b border-white/5">
-            <div>
-              <div className="text-xs text-amber-300 font-medium">One-time (at project start)</div>
-              <div className="text-[10px] text-slate-500">Setup, dev &amp; one-time fees</div>
+        <div className="grid grid-cols-2 gap-3">
+          {/* We Pay */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-bold text-red-400 uppercase tracking-wide mb-1">We Pay</div>
+            {implCost > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">Implementation</div>
+                <div className="text-xs font-semibold text-amber-300">–{fmt(implCost)}</div>
+              </div>
+            )}
+            {infraAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">Infrastructure /yr</div>
+                <div className="text-xs font-semibold text-blue-300">–{fmt(infraAnnual)}</div>
+              </div>
+            )}
+            {maCostAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">MA cost /yr</div>
+                <div className="text-xs font-semibold text-purple-300">–{fmt(maCostAnnual)}</div>
+              </div>
+            )}
+            <div className="border-t border-white/10 pt-1">
+              <div className="text-xs font-bold text-red-300">–{fmt(totalCost)}</div>
             </div>
-            <span className="text-sm font-bold text-amber-300 ml-3">{fmt(onetimePayment)}</span>
           </div>
-        )}
 
-        {yearlyPayment > 0 && (
-          <div className="flex justify-between items-center py-1.5 border-b border-white/5">
-            <div>
-              <div className="text-xs text-indigo-300 font-medium">Yearly subscriptions</div>
-              <div className="text-[10px] text-slate-500">Paid annually</div>
+          {/* Client Pays */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-bold text-green-400 uppercase tracking-wide mb-1">Client Pays</div>
+            {implFeeAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">Implementation fee</div>
+                <div className="text-xs font-semibold text-amber-300">+{fmt(implFeeAnnual)}</div>
+              </div>
+            )}
+            {serviceRevAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">Subscription /yr</div>
+                <div className="text-xs font-semibold text-emerald-300">+{fmt(serviceRevAnnual)}</div>
+              </div>
+            )}
+            {maFeeAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-slate-500">MA fee /yr</div>
+                <div className="text-xs font-semibold text-purple-300">+{fmt(maFeeAnnual)}</div>
+              </div>
+            )}
+            <div className="border-t border-white/10 pt-1">
+              <div className="text-xs font-bold text-green-300">+{fmt(totalRev)}</div>
             </div>
-            <span className="text-sm font-bold text-indigo-300 ml-3">{fmt(yearlyPayment)}/yr</span>
           </div>
-        )}
-
-        {monthlyAnnual > 0 && (
-          <div className="flex justify-between items-center py-1.5 border-b border-white/5">
-            <div>
-              <div className="text-xs text-blue-300 font-medium">Monthly recurring × 12</div>
-              <div className="text-[10px] text-slate-500">Infrastructure &amp; services</div>
-            </div>
-            <span className="text-sm font-bold text-blue-300 ml-3">{fmt(monthlyAnnual)}</span>
-          </div>
-        )}
+        </div>
       </div>
 
-      <div className="px-4 py-3 flex justify-between items-center mt-1" style={{ background: "#1E293B" }}>
-        <span className="text-sm font-bold text-white">Year 1 Total</span>
-        <div className="text-right">
-          <div className="text-xl font-bold text-white">{fmt(total)}</div>
-          <div className="text-[10px] text-slate-400">{fmtAlt(total)}</div>
+      <div className="px-4 py-3" style={{ background: "#1E293B" }}>
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-bold text-white">Year 1 Profit</span>
+          <div className="text-right">
+            <div className={`text-xl font-bold ${isPos ? "text-green-400" : "text-red-400"}`}>
+              {totalRev > 0 ? `${isPos ? "+" : ""}${fmt(profit)}` : "—"}
+            </div>
+            {totalRev > 0 && <div className="text-[10px] text-slate-400">{margin.toFixed(1)}% margin · {fmtAlt(profit)}</div>}
+          </div>
         </div>
+        {implFeeAnnual > 0 && implCost > 0 && (
+          <div className="text-[10px] text-slate-500 mt-1.5 space-x-2">
+            <span>Impl: {implFeeAnnual >= implCost ? `+${fmt(implFeeAnnual - implCost)}` : `–${fmt(implCost - implFeeAnnual)}`}</span>
+            <span>·</span>
+            <span>Sub covers infra: {serviceRevAnnual >= infraAnnual ? "✓" : "✗"}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Year 2+ recurring summary card ──────────────────────────────────────────
+// ── Year 2+ P&L card ──────────────────────────────────────────────────────────
 
 interface Year2CardProps {
-  monthlyAnnual: number;
-  yearlyPayment: number;
-  fmt: (usd: number) => string;
+  infraAnnual:      number;
+  maCostAnnual:     number;
+  serviceRevAnnual: number;
+  maFeeAnnual:      number;
+  fmt:    (usd: number) => string;
   fmtAlt: (usd: number) => string;
 }
-function Year2Card({ monthlyAnnual, yearlyPayment, fmt, fmtAlt }: Year2CardProps) {
-  const total = monthlyAnnual + yearlyPayment;
-  if (total === 0) return null;
+function Year2Card({ infraAnnual, maCostAnnual, serviceRevAnnual, maFeeAnnual, fmt, fmtAlt }: Year2CardProps) {
+  const costWithMA  = infraAnnual + maCostAnnual;
+  const revWithMA   = serviceRevAnnual + maFeeAnnual;
+  const profitWithMA = revWithMA - costWithMA;
+  const marginWithMA = revWithMA > 0 ? (profitWithMA / revWithMA) * 100 : 0;
+
+  const profitNoMA  = serviceRevAnnual - infraAnnual;
+  const marginNoMA  = serviceRevAnnual > 0 ? (profitNoMA / serviceRevAnnual) * 100 : 0;
+
+  if (costWithMA === 0 && serviceRevAnnual === 0) return null;
+
+  const hasMA = maCostAnnual > 0 || maFeeAnnual > 0;
+
   return (
     <div className="rounded-xl overflow-hidden border border-slate-200">
-      <div className="px-4 pt-3 pb-1 bg-slate-50">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5">
-          📈 From Year 2 (per year)
+      <div className="px-4 pt-3 pb-3 bg-slate-50">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+          Year 2+ — Annual P&L
         </div>
-        {yearlyPayment > 0 && (
-          <div className="flex justify-between items-center py-1 border-b border-slate-200">
-            <span className="text-xs text-slate-500">Yearly payments</span>
-            <span className="text-xs font-semibold text-indigo-600">{fmt(yearlyPayment)}/yr</span>
+
+        <div className="space-y-1.5 mb-3">
+          {infraAnnual > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Infrastructure /yr</span>
+              <span className="font-semibold text-red-500">–{fmt(infraAnnual)}</span>
+            </div>
+          )}
+          {maCostAnnual > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">MA cost /yr</span>
+              <span className="font-semibold text-purple-500">–{fmt(maCostAnnual)}</span>
+            </div>
+          )}
+          {serviceRevAnnual > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Subscription rev /yr</span>
+              <span className="font-semibold text-emerald-600">+{fmt(serviceRevAnnual)}</span>
+            </div>
+          )}
+          {maFeeAnnual > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-400 italic">MA fee (if client buys)</span>
+              <span className="font-semibold text-purple-600">+{fmt(maFeeAnnual)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className={`grid gap-2 border-t border-slate-200 pt-2 ${hasMA ? "grid-cols-2" : "grid-cols-1"}`}>
+          {hasMA && (
+            <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+              <div className="text-[10px] font-bold text-purple-600 mb-1">With MA</div>
+              <div className={`text-sm font-bold ${profitWithMA >= 0 ? "text-green-600" : "text-red-500"}`}>
+                {revWithMA > 0 ? `${profitWithMA >= 0 ? "+" : ""}${fmt(profitWithMA)}` : "—"}
+              </div>
+              {revWithMA > 0 && <div className="text-[10px] text-slate-400">{marginWithMA.toFixed(1)}% · {fmtAlt(profitWithMA)}</div>}
+            </div>
+          )}
+
+          <div className={`rounded-lg p-2 border ${hasMA ? "bg-blue-50 border-blue-100" : "bg-slate-100 border-slate-200"}`}>
+            <div className={`text-[10px] font-bold mb-1 ${hasMA ? "text-blue-600" : "text-slate-600"}`}>
+              {hasMA ? "Without MA" : "Annual"}
+            </div>
+            <div className={`text-sm font-bold ${profitNoMA >= 0 ? "text-green-600" : "text-red-500"}`}>
+              {serviceRevAnnual > 0 ? `${profitNoMA >= 0 ? "+" : ""}${fmt(profitNoMA)}` : "—"}
+            </div>
+            {serviceRevAnnual > 0 && <div className="text-[10px] text-slate-400">{marginNoMA.toFixed(1)}% · {fmtAlt(profitNoMA)}</div>}
           </div>
-        )}
-        {monthlyAnnual > 0 && (
-          <div className="flex justify-between items-center py-1 border-b border-slate-200">
-            <span className="text-xs text-slate-500">Monthly recurring × 12</span>
-            <span className="text-xs font-semibold text-blue-600">{fmt(monthlyAnnual)}</span>
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-3 flex justify-between items-center bg-slate-100">
-        <span className="text-sm font-bold text-slate-700">Year 2+ Cost /yr</span>
-        <div className="text-right">
-          <div className="text-base font-bold text-slate-800">{fmt(total)}</div>
-          <div className="text-[10px] text-slate-400">{fmtAlt(total)}</div>
         </div>
       </div>
     </div>
@@ -284,9 +369,9 @@ function ThreeYearTable({
   const y2Revenue = year2SellingPriceUSD * 12 + monthlyChargeUSD * 12 + subsRevenueAnnual;
 
   const years = [
-    { label: "Year 1", hint: "fee + MA + subs + monthly", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
-    { label: "Year 2", hint: "MA + subs + monthly",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
-    { label: "Year 3", hint: "MA + subs + monthly",       cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 1", hint: "impl + infra + MA (if any)", cost: year1Cost,     revenue: y1Revenue,  border: "#BFDBFE", bg: "#EFF6FF", hbg: "#DBEAFE", lc: "#1D4ED8" },
+    { label: "Year 2", hint: "infra + MA (if client buys)", cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
+    { label: "Year 3", hint: "infra + MA (if client buys)", cost: year2PlusCost, revenue: y2Revenue,  border: "#BBF7D0", bg: "#F0FDF4", hbg: "#DCFCE7", lc: "#15803D" },
   ];
 
   return (
@@ -294,15 +379,15 @@ function ThreeYearTable({
       {/* Selling price inputs */}
       <div className="space-y-4">
         <PriceInput
-          label="💼 Selling Price — Project Delivery Fee (Year 1 only)"
-          hint="Total price you charge the client to build & deliver the project (one-time, Year 1)"
+          label="💼 Implementation Fee (Year 1 only)"
+          hint="What you charge the client to build & deliver the project. Note: may only break even on implementation cost."
           value={sellingPriceUSD}
           onChange={setSellingPrice}
           currency={currency} rate={rate} fmtAlt={fmtAlt}
         />
         <PriceInput
-          label="MA / support revenue (all years)"
-          hint="Annual revenue from client — applies from Year 1 onwards (maintenance, support)"
+          label="🔧 MA / Support Fee (all years, optional)"
+          hint="Annual fee from client for maintenance & support. Client may or may not buy this each year."
           value={year2SellingPriceUSD}
           onChange={setYear2SellingPrice}
           currency={currency} rate={rate} fmtAlt={fmtAlt}
@@ -311,8 +396,8 @@ function ThreeYearTable({
 
         {/* Monthly service charge — true per-month billing (not /yr) */}
         <div>
-          <div className="text-xs font-semibold text-gray-600 mb-0.5">Monthly service charge to client</div>
-          <div className="text-[10px] text-gray-400 mb-1">Billed monthly — applied every year</div>
+          <div className="text-xs font-semibold text-gray-600 mb-0.5">📦 Subscription / Service Charge (monthly)</div>
+          <div className="text-[10px] text-gray-400 mb-1">Recurring yearly — must cover infrastructure cost</div>
           <div className="flex items-center gap-2">
             <span className="text-base text-gray-400">{currency === "thb" ? "฿" : "$"}</span>
             <input
@@ -386,25 +471,25 @@ function ThreeYearTable({
                   <div className="space-y-0.5">
                     {isYear1 && sellingPriceUSD > 0 && (
                       <div className="flex justify-between text-[10px] text-gray-400">
-                        <span>↳ Project fee</span>
+                        <span>↳ Implementation fee</span>
                         <span className="text-amber-500">+{fmt(sellingPriceUSD * 12)}</span>
                       </div>
                     )}
                     {year2SellingPriceUSD > 0 && (
                       <div className="flex justify-between text-[10px] text-gray-400">
-                        <span>↳ MA /yr</span>
+                        <span>↳ MA fee /yr</span>
                         <span className="text-indigo-500">+{fmt(year2SellingPriceUSD * 12)}</span>
                       </div>
                     )}
                     {monthlyChargeUSD > 0 && (
                       <div className="flex justify-between text-[10px] text-gray-400">
-                        <span>↳ Monthly billing × 12</span>
+                        <span>↳ Service charge × 12</span>
                         <span className="text-green-500">+{fmt(monthlyChargeUSD * 12)}</span>
                       </div>
                     )}
                     {subsRevenueAnnual > 0 && (
                       <div className="flex justify-between text-[10px] text-gray-400">
-                        <span>↳ Subscriptions billed</span>
+                        <span>↳ Subscription rev /yr</span>
                         <span className="text-emerald-500">+{fmt(subsRevenueAnnual)}</span>
                       </div>
                     )}
@@ -414,19 +499,19 @@ function ThreeYearTable({
                 <div className="space-y-0.5">
                   {isYear1 && onetimePayment > 0 && (
                     <div className="flex justify-between text-[10px] text-gray-400">
-                      <span>↳ One-time setup</span>
+                      <span>↳ Implementation cost</span>
                       <span className="text-amber-500">–{fmt(onetimePayment)}</span>
                     </div>
                   )}
                   {yearlyPayment > 0 && (
                     <div className="flex justify-between text-[10px] text-gray-400">
-                      <span>↳ Yearly subs/infra</span>
+                      <span>↳ Infra (yearly)</span>
                       <span className="text-indigo-400">–{fmt(yearlyPayment)}</span>
                     </div>
                   )}
                   {monthlyAnnual > 0 && (
                     <div className="flex justify-between text-[10px] text-gray-400">
-                      <span>↳ Monthly × 12</span>
+                      <span>↳ Infra (monthly × 12)</span>
                       <span className="text-blue-400">–{fmt(monthlyAnnual)}</span>
                     </div>
                   )}
@@ -522,9 +607,12 @@ interface CostColumnProps {
   ungroupedUSD:     number;
   devUSD:           number;
   additionalCosts:  AdditionalCostItem[];
-  monthlyAnnual:    number;
-  yearlyPayment:    number;
-  onetimePayment:   number;
+  implCost:         number;
+  infraAnnual:      number;
+  maCostAnnual:     number;
+  implFeeAnnual:    number;
+  serviceRevAnnual: number;
+  maFeeAnnual:      number;
   addUSD:           number;
   nodes:            any[];
   fmt:    (usd: number) => string;
@@ -533,7 +621,8 @@ interface CostColumnProps {
 function CostColumn({
   groupBreakdowns, ungroupedNodes, ungroupedUSD, devUSD,
   additionalCosts,
-  monthlyAnnual, yearlyPayment, onetimePayment,
+  implCost, infraAnnual, maCostAnnual,
+  implFeeAnnual, serviceRevAnnual, maFeeAnnual,
   addUSD, nodes,
   fmt, fmtAlt,
 }: CostColumnProps) {
@@ -594,18 +683,17 @@ function CostColumn({
         />
       )}
 
-      {/* Year 1 payment summary */}
+      {/* Year 1 P&L */}
       <Year1Card
-        monthlyAnnual={monthlyAnnual}
-        yearlyPayment={yearlyPayment}
-        onetimePayment={onetimePayment}
+        implCost={implCost} infraAnnual={infraAnnual} maCostAnnual={maCostAnnual}
+        implFeeAnnual={implFeeAnnual} serviceRevAnnual={serviceRevAnnual} maFeeAnnual={maFeeAnnual}
         fmt={fmt} fmtAlt={fmtAlt}
       />
 
-      {/* Year 2+ recurring */}
+      {/* Year 2+ P&L */}
       <Year2Card
-        monthlyAnnual={monthlyAnnual}
-        yearlyPayment={yearlyPayment}
+        infraAnnual={infraAnnual} maCostAnnual={maCostAnnual}
+        serviceRevAnnual={serviceRevAnnual} maFeeAnnual={maFeeAnnual}
         fmt={fmt} fmtAlt={fmtAlt}
       />
     </div>
@@ -701,6 +789,20 @@ export function SummaryTab({ rate }: { rate: number }) {
   const year1Cost     = monthlyAnnual + yearlyPayment + onetimePayment;
   const year2PlusCost = monthlyAnnual + yearlyPayment;
 
+  // ── P&L breakdown by business role ─────────────────────────────────────────
+  // MA cost = "maintain" category additional costs (what we pay to provide MA)
+  const maCostAnnual = additionalCosts
+    .filter(c => c.category === "maintain")
+    .reduce((s, c) => s + recurringMonthly(c) * 12, 0);
+  // Infrastructure annual = recurring infra excl. MA labor
+  const infraAnnual = (monthlyAnnual + yearlyPayment) - maCostAnnual;
+  // Implementation cost = one-time (dev + setup)
+  const implCost = onetimePayment;
+  // Revenue components
+  const implFeeAnnual    = sellingPriceUSD * 12;         // fee charged to client for implementation
+  const maFeeAnnual      = year2SellingPriceUSD * 12;    // MA fee client pays /yr
+  const serviceRevAnnual = monthlyChargeUSD * 12 + subsRevenueAnnual; // subscription + service /yr
+
   // ── REVENUE: project fee + MA + monthly billing + subscriptions ────────────
   // Year 1 = project fee + MA + monthly charge + subscription billing
   // Year 2+ = MA + monthly charge + subscription billing (no project fee)
@@ -746,9 +848,12 @@ export function SummaryTab({ rate }: { rate: number }) {
               ungroupedUSD={ungroupedUSD}
               devUSD={devUSD}
               additionalCosts={additionalCosts}
-              monthlyAnnual={monthlyAnnual}
-              yearlyPayment={yearlyPayment}
-              onetimePayment={onetimePayment}
+              implCost={implCost}
+              infraAnnual={infraAnnual}
+              maCostAnnual={maCostAnnual}
+              implFeeAnnual={implFeeAnnual}
+              serviceRevAnnual={serviceRevAnnual}
+              maFeeAnnual={maFeeAnnual}
               addUSD={addUSD}
               nodes={nodes}
               fmt={fmt}
@@ -902,21 +1007,20 @@ export function SummaryTab({ rate }: { rate: number }) {
           />
         )}
 
-        {/* ── Year 1 payment card ──────────────────────────────────────────── */}
+        {/* ── Year 1 P&L card ──────────────────────────────────────────────── */}
         {!isEmpty && (
           <Year1Card
-            monthlyAnnual={monthlyAnnual}
-            yearlyPayment={yearlyPayment}
-            onetimePayment={onetimePayment}
+            implCost={implCost} infraAnnual={infraAnnual} maCostAnnual={maCostAnnual}
+            implFeeAnnual={implFeeAnnual} serviceRevAnnual={serviceRevAnnual} maFeeAnnual={maFeeAnnual}
             fmt={fmt} fmtAlt={fmtAlt}
           />
         )}
 
-        {/* ── Year 2+ recurring card ───────────────────────────────────────── */}
+        {/* ── Year 2+ P&L card ─────────────────────────────────────────────── */}
         {!isEmpty && (
           <Year2Card
-            monthlyAnnual={monthlyAnnual}
-            yearlyPayment={yearlyPayment}
+            infraAnnual={infraAnnual} maCostAnnual={maCostAnnual}
+            serviceRevAnnual={serviceRevAnnual} maFeeAnnual={maFeeAnnual}
             fmt={fmt} fmtAlt={fmtAlt}
           />
         )}
