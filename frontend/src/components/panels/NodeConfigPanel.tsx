@@ -531,7 +531,17 @@ export function NodeConfigPanel({ nodeId, onClose }: Props) {
         {field("Instance Type", sel("instanceType", INSTANCE_TYPES))}
         {field("Count", inp("count", "number", { min: 1 }))}
         {field("OS", sel("operatingSystem", ["Linux", "Windows", "RHEL"]))}
-        {field("Tenancy", sel("tenancy", ["shared", "dedicated", "host"]))}
+        {field("Tenancy",
+          <select
+            className="border rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-400"
+            value={(cfg as any).tenancy ?? "shared"}
+            onChange={(e) => updateNodeConfig(nodeId, { tenancy: e.target.value } as any)}
+          >
+            <option value="shared">Shared (standard)</option>
+            <option value="dedicated">Dedicated Instance (+10%)</option>
+            <option value="host">Dedicated Host (×2.0)</option>
+          </select>
+        )}
         {field("Utilization Hours/mo", inp("utilizationHours", "number", { min: 1 }))}
         {field("EBS Volume (GB)", inp("ebsVolumeGb", "number", { min: 1 }))}
         {field("EBS Type", sel("ebsType", ["gp3", "gp2", "io1", "st1", "sc1"]))}
